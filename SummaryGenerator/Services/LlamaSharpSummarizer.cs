@@ -119,40 +119,7 @@ namespace SummaryGenerator.Services
 
         private string CleanSummary(string rawOutput)
         {
-            if (string.IsNullOrWhiteSpace(rawOutput))
-            {
-                return string.Empty;
-            }
-
-            var cleaned = rawOutput.Trim();
-            var stopIndex = FindFirstStopPhraseIndex(cleaned, _options.StopPhrases);
-            if (stopIndex >= 0)
-            {
-                cleaned = cleaned[..stopIndex].TrimEnd();
-            }
-
-            return cleaned.Trim();
-        }
-
-        private static int FindFirstStopPhraseIndex(string text, IEnumerable<string> stopPhrases)
-        {
-            var firstIndex = -1;
-
-            foreach (var phrase in stopPhrases.Where(phrase => !string.IsNullOrWhiteSpace(phrase)))
-            {
-                var index = text.IndexOf(phrase, StringComparison.OrdinalIgnoreCase);
-                if (index < 0)
-                {
-                    continue;
-                }
-
-                if (firstIndex < 0 || index < firstIndex)
-                {
-                    firstIndex = index;
-                }
-            }
-
-            return firstIndex;
+            return SummaryOutputCleaner.Clean(rawOutput, _options.StopPhrases);
         }
 
         private static int ResolveThreadCount(int configuredThreads)
