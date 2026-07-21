@@ -1,0 +1,292 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Summary Generator";
+}
+
+<div class="container py-4">
+    <h1 class="mb-3">Local PDF Summary Generator</h1>
+    <p class="text-muted">Upload one or more PDFs, queue them for processing, and download generated markdown summaries.</p>
+
+    @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        <div class="alert alert-success" role="alert">@Model.StatusMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger" role="alert">@Model.ErrorMessage</div>
+    }
+
+    <div asp-validation-summary="All" class="text-danger mb-3"></div>
+
+    <div class="card mb-4">
+        <div class="card-header">Queue a document</div>
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data" asp-page-handler="Enqueue">
+                <div class="mb-3">
+                    <label asp-for="SelectedModelName" class="form-label">Model</label>
+                    <select asp-for="SelectedModelName" asp-items="Model.ModelChoices" class="form-select">
+                        <option value="">Select a model</option>
+                    </select>
+                    <span asp-validation-for="SelectedModelName" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="SelectedPromptProfileId" class="form-label">Summary persona / prompt</label>
+                    <select asp-for="SelectedPromptProfileId" asp-items="Model.PromptChoices" class="form-select">
+                        <option value="">Select a prompt</option>
+                    </select>
+                    <span asp-validation-for="SelectedPromptProfileId" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="CustomPromptName" class="form-label">Custom prompt name (optional)</label>
+                    <input asp-for="CustomPromptName" class="form-control" />
+                    <div class="form-text">
+                        To use your own prompt for this upload and future uploads, provide a name and prompt text below.
+                    </div>
+                    <span asp-validation-for="CustomPromptName" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="CustomPromptText" class="form-label">Custom prompt text (optional)</label>
+                    <textarea asp-for="CustomPromptText" class="form-control" rows="6"></textarea>
+                    <span asp-validation-for="CustomPromptText" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="UploadedPdf" class="form-label">PDF File</label>
+                    <input asp-for="UploadedPdf" class="form-control" type="file" accept=".pdf,application/pdf" />
+                    <span asp-validation-for="UploadedPdf" class="text-danger"></span>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Queue PDF</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">Model download status</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th>Status</th>
+                            <th>Size</th>
+                            <th>Repository</th>
+                            <th>File</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var modelStatus in Model.ModelStatuses)
+                        {
+                            <tr>
+                                <td>@modelStatus.Name</td>
+                                <td>
+                                    @if (modelStatus.IsDownloaded)
+                                    {
+                                        <span class="badge text-bg-success">Downloaded</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge text-bg-warning">Not downloaded</span>
+                                    }
+                                </td>
+                                <td>@(modelStatus.SizeBytes.HasValue ? $"{Math.Round(modelStatus.SizeBytes.Value / 1024d / 1024d, 2)} MB" : "-")</td>
+                                <td><code>@modelStatus.Repository</code></td>
+                                <td><code>@modelStatus.FileName</code></td>
+                                <td>
+                                    @if (modelStatus.IsDownloaded)
+                                    {
+                                        <button type="button" class="btn btn-outline-success btn-sm" disabled>Using local model</button>
+                                    }
+                                    else
+                                    {
+                                        <form method="post" asp-page-handler="DownloadModel" class="m-0">
+                                            <input type="hidden" name="modelName" value="@modelStatus.Name" />
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">Download model</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Queue status</span>
+            <small class="text-muted">Auto-refresh every 5s</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Task ID</th>
+                            <th>Source</th>
+                            <th>Model</th>
+                            <th>Prompt</th>
+                            <th>Status</th>
+                            <th>Created (UTC)</th>
+                            <th>Elapsed</th>
+                            <th>Completed (UTC)</th>
+                            <th>Output</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody id="task-status-body">
+                        @foreach (var task in Model.TaskSummaries)
+                        {
+                            <tr>
+                                <td><code>@task.Id</code></td>
+                                <td>@task.SourceFileName</td>
+                                <td>@task.ModelName</td>
+                                <td>@task.PromptProfileName</td>
+                                <td>@task.Status</td>
+                                <td>@task.CreatedAtUtc.ToString("u")</td>
+                                <td class="elapsed-cell"
+                                    data-started="@task.StartedAtUtc?.ToString("O")"
+                                    data-completed="@task.CompletedAtUtc?.ToString("O")">
+                                    @if (task.ElapsedSeconds.HasValue)
+                                    {
+                                        <span>@TimeSpan.FromSeconds(task.ElapsedSeconds.Value).ToString(@"hh\:mm\:ss")</span>
+                                    }
+                                    else
+                                    {
+                                        <span>-</span>
+                                    }
+                                </td>
+                                <td>@(task.CompletedAtUtc?.ToString("u") ?? "-")</td>
+                                <td>
+                                    @if (task.HasOutput)
+                                    {
+                                        <a asp-page-handler="Download" asp-route-taskId="@task.Id">Download .md</a>
+                                    }
+                                    else
+                                    {
+                                        <span>-</span>
+                                    }
+                                </td>
+                                <td>@(string.IsNullOrWhiteSpace(task.ErrorMessage) ? "-" : task.ErrorMessage)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        const statusBody = document.getElementById('task-status-body');
+        const statusUrl = '?handler=Status';
+
+        function formatElapsed(seconds) {
+            if (seconds === null || seconds === undefined || Number.isNaN(seconds)) {
+                return '-';
+            }
+
+            const total = Math.max(0, Math.floor(seconds));
+            const hours = String(Math.floor(total / 3600)).padStart(2, '0');
+            const minutes = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
+            const secs = String(total % 60).padStart(2, '0');
+            return `${hours}:${minutes}:${secs}`;
+        }
+
+        function parseIsoDate(value) {
+            if (!value) {
+                return null;
+            }
+
+            const parsed = new Date(value);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+        }
+
+        function computeElapsedSeconds(task) {
+            const started = parseIsoDate(task.startedAtUtc);
+            if (!started) {
+                return null;
+            }
+
+            const completed = parseIsoDate(task.completedAtUtc);
+            const end = completed ?? new Date();
+            return (end.getTime() - started.getTime()) / 1000;
+        }
+
+        function renderRow(task) {
+            const completedAt = task.completedAtUtc ? task.completedAtUtc.replace('T', ' ').replace('Z', ' UTC') : '-';
+            const createdAt = task.createdAtUtc ? task.createdAtUtc.replace('T', ' ').replace('Z', ' UTC') : '-';
+            const elapsed = task.elapsedSeconds ?? computeElapsedSeconds(task);
+            const outputCell = task.hasOutput
+                ? `<a href="?handler=Download&taskId=${task.id}">Download .md</a>`
+                : '-';
+            const errorCell = task.errorMessage ?? '-';
+
+            return `
+                <tr>
+                    <td><code>${task.id}</code></td>
+                    <td>${task.sourcePdfPath.split(/[\\\\/]/).pop()}</td>
+                    <td>${task.modelName}</td>
+                    <td>${task.promptProfileName ?? '-'}</td>
+                    <td>${task.status}</td>
+                    <td>${createdAt}</td>
+                    <td class="elapsed-cell" data-started="${task.startedAtUtc ?? ''}" data-completed="${task.completedAtUtc ?? ''}">${formatElapsed(elapsed)}</td>
+                    <td>${completedAt}</td>
+                    <td>${outputCell}</td>
+                    <td>${errorCell}</td>
+                </tr>`;
+        }
+
+        async function refreshStatuses() {
+            try {
+                const response = await fetch(statusUrl, { cache: 'no-store' });
+                if (!response.ok) {
+                    return;
+                }
+
+                const tasks = await response.json();
+                statusBody.innerHTML = tasks.map(renderRow).join('');
+            } catch (e) {
+                console.debug('Status refresh failed', e);
+            }
+        }
+
+        function updateElapsedCells() {
+            const elapsedCells = document.querySelectorAll('.elapsed-cell');
+            elapsedCells.forEach((cell) => {
+                const startedAt = cell.getAttribute('data-started');
+                if (!startedAt) {
+                    cell.textContent = '-';
+                    return;
+                }
+
+                const startedDate = parseIsoDate(startedAt);
+                if (!startedDate) {
+                    cell.textContent = '-';
+                    return;
+                }
+
+                const completedAt = cell.getAttribute('data-completed');
+                const completedDate = parseIsoDate(completedAt);
+                const end = completedDate ?? new Date();
+                const elapsedSeconds = (end.getTime() - startedDate.getTime()) / 1000;
+                cell.textContent = formatElapsed(elapsedSeconds);
+            });
+        }
+
+        updateElapsedCells();
+        refreshStatuses();
+        setInterval(updateElapsedCells, 1000);
+        setInterval(refreshStatuses, 5000);
+    </script>
+}
