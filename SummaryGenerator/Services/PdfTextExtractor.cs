@@ -31,7 +31,7 @@ namespace SummaryGenerator.Services
                             .Split(Environment.NewLine, StringSplitOptions.TrimEntries)
                             .Where(line => !string.IsNullOrWhiteSpace(line))
                             .ToList())
-                    .Where(lines => lines.Count > 0)
+                    .Where(lines => lines.Count > 0 && !IsUnwantedPage(lines))
                     .ToList();
             }
             catch (Exception ex)
@@ -107,5 +107,25 @@ namespace SummaryGenerator.Services
 
         [GeneratedRegex(@"^(page\s+)?\d+(\s+of\s+\d+)?$", RegexOptions.IgnoreCase)]
         private static partial Regex PageMarkerRegex();
+
+        private static bool IsUnwantedPage(List<string> lines)
+        {
+            var firstFewLines = string.Join(" ", lines.Take(3)).ToLowerInvariant();
+            if (firstFewLines.Contains("table of contents") || 
+                firstFewLines.Contains("bibliography") || 
+                firstFewLines.Contains("index "))
+            {
+                return true;
+            }
+
+            // Heuristic for dot leaders in TOC
+            int dotCount = lines.Count(l => l.Contains("..."));
+            if (dotCount > 5)
+            {
+                return true;
+            }
+
+            return false;
+        }
     }
 }

@@ -50,7 +50,8 @@ namespace SummaryGenerator.Services
                 {
                     ContextSize = resolvedContextSize,
                     Threads = ResolveThreadCount(_options.Threads),
-                    GpuLayerCount = _options.GpuLayerCount
+                    GpuLayerCount = _options.GpuLayerCount,
+                    FlashAttention = _options.FlashAttention
                 };
 
                 using var weights = LLamaWeights.LoadFromFile(modelParams);
@@ -62,21 +63,61 @@ namespace SummaryGenerator.Services
                     AntiPrompts = _options.StopPhrases
                 };
 
-                var prompt = BuildPrompt(systemPrompt, documentText);
-                var response = new StringBuilder();
+                int chunkSize = 12000;
+                int overlap = 1000;
 
-                await foreach (var token in executor.InferAsync(prompt, inferenceParams, cancellationToken))
+                if (documentText.Length < 15000)
                 {
-                    response.Append(token);
+                    var prompt = BuildPrompt(systemPrompt, documentText);
+                    var response = new StringBuilder();
+
+                    await foreach (var token in executor.InferAsync(prompt, inferenceParams, cancellationToken))
+                    {
+                        response.Append(token);
+                    }
+
+                    var summary = CleanSummary(response.ToString());
+                    logger.LogInformation(
+                        "Summarization completed using model {ModelPath}. ContextSize={ContextSize}. Output chars: {CharacterCount}",
+                        modelPath,
+                        resolvedContextSize,
+                        summary.Length);
+                    return summary;
                 }
 
-                var summary = CleanSummary(response.ToString());
+                logger.LogInformation("Document is large ({Length} chars). Using map-reduce chunking.", documentText.Length);
+                var chunkSummaries = new List<string>();
+                for (int i = 0; i < documentText.Length; i += (chunkSize - overlap))
+                {
+                    int length = Math.Min(chunkSize, documentText.Length - i);
+                    string chunkText = documentText.Substring(i, length);
+                    string chunkPrompt = BuildPrompt("Summarize the following section of the document, focusing on key operational and strategic points:", chunkText);
+                    
+                    var chunkResponse = new StringBuilder();
+                    await foreach (var token in executor.InferAsync(chunkPrompt, inferenceParams, cancellationToken))
+                    {
+                        chunkResponse.Append(token);
+                    }
+                    chunkSummaries.Add(CleanSummary(chunkResponse.ToString()));
+                }
+
+                logger.LogInformation("Chunking complete. Performing final map-reduce summarization on {Count} chunks.", chunkSummaries.Count);
+                string combinedSummaries = string.Join(Environment.NewLine + "---" + Environment.NewLine, chunkSummaries);
+                var finalPrompt = BuildPrompt(systemPrompt, combinedSummaries);
+                
+                var finalResponse = new StringBuilder();
+                await foreach (var token in executor.InferAsync(finalPrompt, inferenceParams, cancellationToken))
+                {
+                    finalResponse.Append(token);
+                }
+
+                var finalSummary = CleanSummary(finalResponse.ToString());
                 logger.LogInformation(
-                    "Summarization completed using model {ModelPath}. ContextSize={ContextSize}. Output chars: {CharacterCount}",
+                    "Summarization completed map-reduce using model {ModelPath}. ContextSize={ContextSize}. Output chars: {CharacterCount}",
                     modelPath,
                     resolvedContextSize,
-                    summary.Length);
-                return summary;
+                    finalSummary.Length);
+                return finalSummary;
             }
             catch (OperationCanceledException)
             {
@@ -92,12 +133,20 @@ namespace SummaryGenerator.Services
         private static string BuildPrompt(string systemPrompt, string documentText) =>
             $"{systemPrompt.Trim()}{Environment.NewLine}{Environment.NewLine}Document:{Environment.NewLine}{documentText}";
 
+        private const uint MaxSafeContextSize = 32768;
+
         private uint ResolveContextSize(ModelDetails modelDetails)
         {
             var desired = modelDetails.PreferredContextSize.GetValueOrDefault(_options.ContextSize);
             if (desired < _options.MinimumContextSize)
             {
                 desired = _options.MinimumContextSize;
+            }
+
+            // Hard cap to prevent native crashes due to VRAM/RAM exhaustion
+            if (desired > MaxSafeContextSize)
+            {
+                desired = MaxSafeContextSize;
             }
 
             if (modelDetails.MaxContextSize is > 0)

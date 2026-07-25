@@ -14,6 +14,8 @@ namespace SummaryGenerator.Models
 
         public int GpuLayerCount { get; set; } = 0;
 
+        public bool FlashAttention { get; set; } = false;
+
         public int MaxTokens { get; set; } = 2048;
 
         public List<string> StopPhrases { get; set; } =
