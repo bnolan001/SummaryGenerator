@@ -97,7 +97,7 @@ namespace SummaryGenerator.Repositories.HuggingFace
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to download model {Repository}/{FileName}", repository, fileName);
+                logger.LogError(ex, "Failed to download model {Repository}/{FileName} from {Url}", repository, fileName, url);
                 return ModelDownloadResult.Failure(destinationPath, ex.Message);
             }
         }

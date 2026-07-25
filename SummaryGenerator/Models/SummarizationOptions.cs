@@ -49,7 +49,7 @@ namespace SummaryGenerator.Models
                     Tailor the depth and tone for a mid-to-senior level PME student focused on operational and strategic application.
                     Do not include any extra commentary, self-reference, disclaimers, closing messages, or "final answer" text.
                     End output immediately after the Study Notes section. Only include information from the document.
-                    Do not make up information or include any content that is not in the document.
+                    Base your summary STRICTLY on the provided text. Do not infer facts not directly stated..
                     """
             },
             new()
@@ -67,7 +67,7 @@ namespace SummaryGenerator.Models
                     Use clear, direct language with brief explanations suitable for an undergraduate reading level.
                     Do not include any extra commentary, self-reference, disclaimers, closing messages, or "final answer" text.
                     End output immediately after the Study Notes section. Only include information from the document.
-                    Do not make up information or include any content that is not in the document.
+                    Base your summary STRICTLY on the provided text. Do not infer facts not directly stated.
                     """
             },
             new()
@@ -85,7 +85,7 @@ namespace SummaryGenerator.Models
                     Emphasize strategic implications, risk considerations, and leadership-relevant decisions.
                     Do not include any extra commentary, self-reference, disclaimers, closing messages, or "final answer" text.
                     End output immediately after the Study Notes section. Only include information from the document.
-                    Do not make up information or include any content that is not in the document.
+                    Base your summary STRICTLY on the provided text. Do not infer facts not directly stated.
                     """
             }
         ];
