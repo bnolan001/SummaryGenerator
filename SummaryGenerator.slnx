@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="SummaryGenerator.Tests/SummaryGenerator.Tests.csproj" />
   <Project Path="SummaryGenerator/SummaryGenerator.csproj" />
 </Solution>
