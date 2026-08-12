@@ -18,6 +18,12 @@ namespace SummaryGenerator.Models
 
         public int MaxTokens { get; set; } = 2048;
 
+        public float Temperature { get; set; } = 0.2f;
+
+        public float TopP { get; set; } = 0.95f;
+
+        public float RepeatPenalty { get; set; } = 1.1f;
+
         public List<string> StopPhrases { get; set; } =
         [
             "I hope this meets your requirements",

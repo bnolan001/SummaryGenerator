@@ -1,6 +1,7 @@
 using System.Text;
 using LLama;
 using LLama.Common;
+using LLama.Sampling;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SummaryGenerator.Models;
@@ -57,14 +58,20 @@ namespace SummaryGenerator.Services
                 using var weights = LLamaWeights.LoadFromFile(modelParams);
                 using var context = weights.CreateContext(modelParams, NullLogger.Instance);
                 var executor = new InteractiveExecutor(context, NullLogger.Instance);
+                var samplingPipeline = new DefaultSamplingPipeline
+                {
+                    Temperature = _options.Temperature,
+                    TopP = _options.TopP,
+                    RepeatPenalty = _options.RepeatPenalty
+                };
                 var inferenceParams = new InferenceParams
                 {
                     MaxTokens = _options.MaxTokens,
-                    AntiPrompts = _options.StopPhrases
+                    AntiPrompts = _options.StopPhrases,
+                    SamplingPipeline = samplingPipeline
                 };
 
                 int chunkSize = 12000;
-                int overlap = 1000;
 
                 if (documentText.Length < 15000)
                 {
@@ -87,9 +94,30 @@ namespace SummaryGenerator.Services
 
                 logger.LogInformation("Document is large ({Length} chars). Using map-reduce chunking.", documentText.Length);
                 var chunkSummaries = new List<string>();
-                for (int i = 0; i < documentText.Length; i += (chunkSize - overlap))
+                int i = 0;
+                while (i < documentText.Length)
                 {
                     int length = Math.Min(chunkSize, documentText.Length - i);
+                    
+                    if (i + length < documentText.Length)
+                    {
+                        int searchStartIndex = i + length - 1;
+                        int lastDoubleNewline = documentText.LastIndexOf("\n\n", searchStartIndex, length, StringComparison.Ordinal);
+                        
+                        if (lastDoubleNewline > i)
+                        {
+                            length = lastDoubleNewline - i + 2;
+                        }
+                        else
+                        {
+                            int lastPeriod = documentText.LastIndexOf(". ", searchStartIndex, length, StringComparison.Ordinal);
+                            if (lastPeriod > i)
+                            {
+                                length = lastPeriod - i + 1;
+                            }
+                        }
+                    }
+
                     string chunkText = documentText.Substring(i, length);
                     string chunkPrompt = BuildPrompt("Summarize the following section of the document, focusing on key operational and strategic points:", chunkText);
                     
@@ -99,6 +127,8 @@ namespace SummaryGenerator.Services
                         chunkResponse.Append(token);
                     }
                     chunkSummaries.Add(CleanSummary(chunkResponse.ToString()));
+                    
+                    i += length;
                 }
 
                 logger.LogInformation("Chunking complete. Performing final map-reduce summarization on {Count} chunks.", chunkSummaries.Count);
@@ -131,7 +161,7 @@ namespace SummaryGenerator.Services
         }
 
         private static string BuildPrompt(string systemPrompt, string documentText) =>
-            $"{systemPrompt.Trim()}{Environment.NewLine}{Environment.NewLine}Document:{Environment.NewLine}{documentText}";
+            $"### Instruction:\n{systemPrompt.Trim()}\n\n### Input:\n{documentText}\n\n### Response:\n";
 
         private const uint MaxSafeContextSize = 32768;
 
