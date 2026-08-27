@@ -56,8 +56,7 @@ namespace SummaryGenerator.Services
                 };
 
                 using var weights = LLamaWeights.LoadFromFile(modelParams);
-                using var context = weights.CreateContext(modelParams, NullLogger.Instance);
-                var executor = new InteractiveExecutor(context, NullLogger.Instance);
+                var executor = new StatelessExecutor(weights, modelParams);
                 var samplingPipeline = new DefaultSamplingPipeline
                 {
                     Temperature = _options.Temperature,
@@ -68,7 +67,8 @@ namespace SummaryGenerator.Services
                 {
                     MaxTokens = _options.MaxTokens,
                     AntiPrompts = _options.StopPhrases,
-                    SamplingPipeline = samplingPipeline
+                    SamplingPipeline = samplingPipeline,
+                    OverflowStrategy = LLama.Common.ContextOverflowStrategy.TruncateAndReprefill
                 };
 
                 int chunkSize = 12000;
