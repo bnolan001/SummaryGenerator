@@ -75,7 +75,7 @@ namespace SummaryGenerator.Services
 
                 if (documentText.Length < 15000)
                 {
-                    var prompt = BuildPrompt(systemPrompt, documentText);
+                    var prompt = BuildPrompt(modelDetails.Name, systemPrompt, documentText);
                     var response = new StringBuilder();
 
                     await foreach (var token in executor.InferAsync(prompt, inferenceParams, cancellationToken))
@@ -119,7 +119,7 @@ namespace SummaryGenerator.Services
                     }
 
                     string chunkText = documentText.Substring(i, length);
-                    string chunkPrompt = BuildPrompt("Summarize the following section of the document, focusing on key operational and strategic points:", chunkText);
+                    string chunkPrompt = BuildPrompt(modelDetails.Name, "Summarize the following section of the document, focusing on key operational and strategic points:", chunkText);
                     
                     var chunkResponse = new StringBuilder();
                     await foreach (var token in executor.InferAsync(chunkPrompt, inferenceParams, cancellationToken))
@@ -133,7 +133,7 @@ namespace SummaryGenerator.Services
 
                 logger.LogInformation("Chunking complete. Performing final map-reduce summarization on {Count} chunks.", chunkSummaries.Count);
                 string combinedSummaries = string.Join(Environment.NewLine + "---" + Environment.NewLine, chunkSummaries);
-                var finalPrompt = BuildPrompt(systemPrompt, combinedSummaries);
+                var finalPrompt = BuildPrompt(modelDetails.Name, systemPrompt, combinedSummaries);
                 
                 var finalResponse = new StringBuilder();
                 await foreach (var token in executor.InferAsync(finalPrompt, inferenceParams, cancellationToken))
@@ -160,8 +160,25 @@ namespace SummaryGenerator.Services
             }
         }
 
-        private static string BuildPrompt(string systemPrompt, string documentText) =>
-            $"### Instruction:\n{systemPrompt.Trim()}\n\n### Input:\n{documentText}\n\n### Response:\n";
+        private static string BuildPrompt(string modelName, string systemPrompt, string documentText)
+        {
+            var name = modelName?.ToLowerInvariant() ?? string.Empty;
+
+            if (name.Contains("gemma"))
+            {
+                return $"<start_of_turn>user\n{systemPrompt.Trim()}\n\n{documentText}<end_of_turn>\n<start_of_turn>model\n";
+            }
+            if (name.Contains("qwen") || name.Contains("phi"))
+            {
+                return $"<|im_start|>system\n{systemPrompt.Trim()}<|im_end|>\n<|im_start|>user\n{documentText}<|im_end|>\n<|im_start|>assistant\n";
+            }
+            if (name.Contains("llama"))
+            {
+                return $"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{systemPrompt.Trim()}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{documentText}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n";
+            }
+
+            return $"### Instruction:\n{systemPrompt.Trim()}\n\n### Input:\n{documentText}\n\n### Response:\n";
+        }
 
         private const uint MaxSafeContextSize = 32768;
 
