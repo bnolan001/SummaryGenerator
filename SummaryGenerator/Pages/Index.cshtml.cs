@@ -338,6 +338,19 @@ namespace SummaryGenerator.Pages
             return File(stream, "text/markdown", fileName);
         }
 
+        public IActionResult OnGetViewMarkdown(Guid taskId)
+        {
+            if (!_processingQueue.TryGetTask(taskId, out var task) ||
+                task?.Result is null ||
+                !System.IO.File.Exists(task.Result.OutputMarkdownPath))
+            {
+                return NotFound();
+            }
+
+            var markdown = System.IO.File.ReadAllText(task.Result.OutputMarkdownPath);
+            return Content(markdown, "text/markdown");
+        }
+
         private List<ModelDetails> GetModels()
         {
             return _modelsOptions.Choices ?? new List<ModelDetails>();

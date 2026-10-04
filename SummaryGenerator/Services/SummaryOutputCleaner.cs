@@ -9,7 +9,7 @@ namespace SummaryGenerator.Services
                 return string.Empty;
             }
 
-            var cleaned = rawOutput.Trim();
+            var cleaned = RemoveLeadingModelControlLines(rawOutput.Trim());
             var stopIndex = FindFirstStopPhraseIndex(cleaned, stopPhrases);
             if (stopIndex >= 0)
             {
@@ -17,6 +17,38 @@ namespace SummaryGenerator.Services
             }
 
             return cleaned.Trim();
+        }
+
+        private static string RemoveLeadingModelControlLines(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return string.Empty;
+            }
+
+            var normalized = text.Replace("\r\n", "\n");
+            var lines = normalized.Split('\n');
+            var index = 0;
+
+            while (index < lines.Length && IsModelControlLine(lines[index]))
+            {
+                index++;
+            }
+
+            while (index < lines.Length && string.IsNullOrWhiteSpace(lines[index]))
+            {
+                index++;
+            }
+
+            return index == 0
+                ? text
+                : string.Join('\n', lines[index..]);
+        }
+
+        private static bool IsModelControlLine(string line)
+        {
+            var trimmed = line.TrimStart();
+            return trimmed.StartsWith("<|", StringComparison.Ordinal);
         }
 
         private static int FindFirstStopPhraseIndex(string text, IEnumerable<string> stopPhrases)

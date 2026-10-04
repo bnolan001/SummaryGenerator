@@ -188,6 +188,7 @@
                                     {
                                         <div>
                                             <a asp-page-handler="Download" asp-route-taskId="@task.Id" class="d-block mb-1">Download .md</a>
+                                            <a asp-page-handler="ViewMarkdown" asp-route-taskId="@task.Id" class="d-block mb-1" target="_blank" rel="noopener noreferrer">View rendered .md</a>
                                             <form method="post" asp-page-handler="GenerateAudioFromSummary" class="m-0" onsubmit="this.selectedVoice.value = document.getElementById('globalSelectedVoice')?.value || '';">
                                                 <input type="hidden" name="taskId" value="@task.Id" />
                                                 <input type="hidden" name="selectedVoice" value="" />
@@ -262,6 +263,7 @@
                 outputCell = `
                     <div>
                         <a href="?handler=Download&taskId=${task.id}" class="d-block mb-1">Download .md</a>
+                        <a href="?handler=ViewMarkdown&taskId=${task.id}" class="d-block mb-1" target="_blank" rel="noopener noreferrer">View rendered .md</a>
                         <form method="post" action="?handler=GenerateAudioFromSummary" class="m-0" onsubmit="this.selectedVoice.value = document.getElementById('globalSelectedVoice')?.value || '';">
                             <input type="hidden" name="__RequestVerificationToken" value="${token}" />
                             <input type="hidden" name="taskId" value="${task.id}" />
