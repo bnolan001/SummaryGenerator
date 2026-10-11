@@ -30,5 +30,14 @@ namespace SummaryGenerator.Tests.Unit
 
             Assert.Equal("Summary content only", cleaned);
         }
+
+        [Fact]
+        public void Clean_RemovesLeadingModelControlLine()
+        {
+            var raw = "<|channel|>analysis<|channel|>\n\n## Executive Summary\nBody";
+            var cleaned = SummaryOutputCleaner.Clean(raw, []);
+
+            Assert.Equal("## Executive Summary\nBody", cleaned);
+        }
     }
 }

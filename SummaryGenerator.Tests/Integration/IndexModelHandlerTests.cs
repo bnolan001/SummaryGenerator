@@ -188,6 +188,7 @@ namespace SummaryGenerator.Tests.Integration
                 queue,
                 promptStore,
                 new NoopHuggingFaceRepository(),
+                new NoopAudioGenerator(),
                 NullLogger<IndexModel>.Instance);
         }
 
@@ -210,6 +211,24 @@ namespace SummaryGenerator.Tests.Integration
             public Task<ModelDownloadResult> DownloadModelAsync(string repository, string fileName, string destinationPath, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
             {
                 return Task.FromResult(ModelDownloadResult.Success(destinationPath, 0));
+            }
+        }
+
+        private sealed class NoopAudioGenerator : IAudioGenerator
+        {
+            public IReadOnlyList<string> GetAvailableVoices() => Array.Empty<string>();
+
+            public Task<string> GenerateAudioAsync(string markdownContent, string outputPath, string? selectedVoice = null, CancellationToken cancellationToken = default)
+            {
+                // Optional: create an empty file to simulate generated audio output
+                var dir = Path.GetDirectoryName(outputPath);
+                if (!string.IsNullOrEmpty(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+                File.WriteAllText(outputPath, string.Empty);
+
+                return Task.FromResult(outputPath);
             }
         }
 
@@ -251,7 +270,7 @@ namespace SummaryGenerator.Tests.Integration
 
         private sealed class InMemoryQueue : IProcessingQueue
         {
-            public Dictionary<Guid, ProcessingTask> Tasks { get; } = [];
+            public Dictionary<Guid, ProcessingTask> Tasks { get; } = new Dictionary<Guid, ProcessingTask>();
 
             public ProcessingTask Enqueue(string sourcePdfPath, ModelDetails model, PromptProfile promptProfile)
             {
@@ -262,6 +281,30 @@ namespace SummaryGenerator.Tests.Integration
                     PromptProfileId = promptProfile.Id,
                     PromptProfileName = promptProfile.Name,
                     SystemPrompt = promptProfile.Prompt
+                };
+                Tasks[task.Id] = task;
+                return task;
+            }
+
+            // Implemented to satisfy IProcessingQueue
+            public ProcessingTask EnqueueAudio(string sourceMarkdownPath, string? selectedVoice = null)
+            {
+                var task = new ProcessingTask
+                {
+                    SourceMarkdownPath = sourceMarkdownPath,
+                    SelectedVoice = selectedVoice
+                };
+                Tasks[task.Id] = task;
+                return task;
+            }
+
+            // Implemented to satisfy IProcessingQueue
+            public ProcessingTask EnqueueAudioFromSummary(Guid summaryTaskId, string? selectedVoice = null)
+            {
+                var task = new ProcessingTask
+                {
+                    // Link to the originating summary task id could be set in a real implementation.
+                    SelectedVoice = selectedVoice
                 };
                 Tasks[task.Id] = task;
                 return task;
