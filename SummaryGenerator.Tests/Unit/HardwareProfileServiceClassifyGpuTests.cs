@@ -5,6 +5,44 @@ namespace SummaryGenerator.Tests.Unit
 {
     public class HardwareProfileServiceClassifyGpuTests
     {
+        [Theory]
+        [InlineData("Intel(R) Arc(TM) A770 Graphics")]
+        [InlineData("Intel(R) Arc(TM) A370M Graphics")]
+        [InlineData("Intel(R) Arc(TM) B580 Graphics")]
+        [InlineData("Intel(R) Arc(TM) Pro A60 Graphics")]
+        public void ClassifyGpu_IntelArcDiscreteCard_ReturnsDiscrete(string name)
+        {
+            Assert.Equal(GpuTier.Discrete, HardwareProfileService.ClassifyGpu([name]));
+        }
+
+        [Theory]
+        [InlineData("Intel(R) Arc(TM) 140V GPU (16GB)")]
+        [InlineData("Intel(R) Arc(TM) 130V GPU")]
+        [InlineData("Intel(R) Arc(TM) 140T GPU")]
+        [InlineData("Intel(R) Arc(TM) Graphics")]
+        public void ClassifyGpu_IntelArcIntegrated_ReturnsIntegrated(string name)
+        {
+            Assert.Equal(GpuTier.Integrated, HardwareProfileService.ClassifyGpu([name]));
+        }
+
+        [Fact]
+        public void ClassifyGpu_OnlyMicrosoftVirtualAdapters_ReturnsNone()
+        {
+            var tier = HardwareProfileService.ClassifyGpu(
+                ["Microsoft Remote Display Adapter", "Microsoft Hyper-V Video", "Microsoft Basic Display Adapter"]);
+
+            Assert.Equal(GpuTier.None, tier);
+        }
+
+        [Fact]
+        public void ClassifyGpu_MicrosoftAdapterAlongsideIntegrated_ReturnsIntegrated()
+        {
+            var tier = HardwareProfileService.ClassifyGpu(
+                ["Microsoft Remote Display Adapter", "Intel(R) UHD Graphics 620"]);
+
+            Assert.Equal(GpuTier.Integrated, tier);
+        }
+
         [Fact]
         public void ClassifyGpu_NoAdapters_ReturnsNone()
         {

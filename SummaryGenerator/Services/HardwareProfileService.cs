@@ -1,10 +1,11 @@
 using System.Runtime.Versioning;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using SummaryGenerator.Models;
 
 namespace SummaryGenerator.Services
 {
-    public class HardwareProfileService : IHardwareProfileService
+    public partial class HardwareProfileService : IHardwareProfileService
     {
         private readonly Lazy<HardwarePlan> _lazyPlan;
 
@@ -15,25 +16,31 @@ namespace SummaryGenerator.Services
 
         public HardwarePlan GetPlan() => _lazyPlan.Value;
 
+        private static readonly string[] DiscretePatterns =
+        [
+            "NVIDIA",
+            "Radeon RX",
+            "Radeon Pro"
+        ];
+
+        // Microsoft-named adapters are software/virtual (Basic Render/Display, Remote Display, Hyper-V).
+        private const string IgnoredAdapterPattern = "Microsoft";
+
+        // Intel Arc discrete cards carry an A/B model number (A770, A370M, B580, Pro A60);
+        // integrated Arc names don't (Arc 140V, Arc 130V, Arc 140T, Arc Graphics).
+        [GeneratedRegex(@"\bArc(?:\(TM\))?\s+(?:Pro\s+)?[AB]\d{2,3}", RegexOptions.IgnoreCase)]
+        private static partial Regex IntelArcDiscreteRegex();
+
         /// <summary>
         /// Classifies the overall GPU tier from the names of every detected video adapter.
         /// Scans all adapters (not just the first) so a discrete GPU is recognized even when
         /// it's reported alongside integrated graphics (common on hybrid laptops).
         /// </summary>
-        private static readonly string[] DiscretePatterns =
-        [
-            "NVIDIA",
-            "Radeon RX",
-            "Radeon Pro",
-            "Arc A",
-            "Arc B"
-        ];
-
         public static GpuTier ClassifyGpu(IEnumerable<string> adapterNames)
         {
             var names = adapterNames
                 .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Where(name => !name.Contains("Basic Render", StringComparison.OrdinalIgnoreCase))
+                .Where(name => !name.Contains(IgnoredAdapterPattern, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             if (names.Count == 0)
@@ -42,17 +49,18 @@ namespace SummaryGenerator.Services
             }
 
             var anyDiscrete = names.Any(name =>
+                IntelArcDiscreteRegex().IsMatch(name) ||
                 DiscretePatterns.Any(pattern => name.Contains(pattern, StringComparison.OrdinalIgnoreCase)));
 
             return anyDiscrete ? GpuTier.Discrete : GpuTier.Integrated;
         }
 
+        private const double BytesPerGb = 1024.0 * 1024 * 1024;
+
         /// <summary>
         /// Computes recommended inference parameters from raw hardware facts. Pure and
         /// side-effect free so it can be unit tested without real hardware.
         /// </summary>
-        private const double BytesPerGb = 1024.0 * 1024 * 1024;
-
         public static HardwarePlan ComputePlan(int logicalCores, long totalMemoryBytes, GpuTier gpuTier)
         {
             var recommendedThreads = Math.Max(1, logicalCores - 2);
