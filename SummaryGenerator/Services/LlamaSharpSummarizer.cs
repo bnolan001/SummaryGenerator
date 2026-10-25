@@ -87,19 +87,13 @@ namespace SummaryGenerator.Services
                     OverflowStrategy = LLama.Common.ContextOverflowStrategy.TruncateAndReprefill
                 };
 
-                int chunkSize = 12000;
+                int charBudget = DocumentChunker.EstimateCharBudget(resolvedContextSize, _options.ContextSafetyReserveTokens);
 
-                if (documentText.Length < 15000)
+                if (documentText.Length <= charBudget)
                 {
                     var prompt = BuildPrompt(modelDetails.Name, systemPrompt, documentText);
-                    var response = new StringBuilder();
+                    var summary = CleanSummary(await RunInferenceAsync(executor, prompt, inferenceParams, cancellationToken));
 
-                    await foreach (var token in executor.InferAsync(prompt, inferenceParams, cancellationToken))
-                    {
-                        response.Append(token);
-                    }
-
-                    var summary = CleanSummary(response.ToString());
                     logger.LogInformation(
                         "Summarization completed using model {ModelPath}. ContextSize={ContextSize}. Output chars: {CharacterCount}",
                         modelPath,
@@ -108,56 +102,35 @@ namespace SummaryGenerator.Services
                     return summary;
                 }
 
-                logger.LogInformation("Document is large ({Length} chars). Using map-reduce chunking.", documentText.Length);
+                logger.LogInformation(
+                    "Document is large ({Length} chars, budget {Budget} chars). Using map-reduce chunking.",
+                    documentText.Length,
+                    charBudget);
+
+                var chunks = DocumentChunker.SplitIntoChunks(documentText, charBudget);
                 var chunkSummaries = new List<string>();
-                int i = 0;
-                while (i < documentText.Length)
-                {
-                    int length = Math.Min(chunkSize, documentText.Length - i);
-                    
-                    if (i + length < documentText.Length)
-                    {
-                        int searchStartIndex = i + length - 1;
-                        int lastDoubleNewline = documentText.LastIndexOf("\n\n", searchStartIndex, length, StringComparison.Ordinal);
-                        
-                        if (lastDoubleNewline > i)
-                        {
-                            length = lastDoubleNewline - i + 2;
-                        }
-                        else
-                        {
-                            int lastPeriod = documentText.LastIndexOf(". ", searchStartIndex, length, StringComparison.Ordinal);
-                            if (lastPeriod > i)
-                            {
-                                length = lastPeriod - i + 1;
-                            }
-                        }
-                    }
 
-                    string chunkText = documentText.Substring(i, length);
-                    string chunkPrompt = BuildPrompt(modelDetails.Name, "Summarize the following section of the document, focusing on key operational and strategic points:", chunkText);
-                    
-                    var chunkResponse = new StringBuilder();
-                    await foreach (var token in executor.InferAsync(chunkPrompt, inferenceParams, cancellationToken))
-                    {
-                        chunkResponse.Append(token);
-                    }
-                    chunkSummaries.Add(CleanSummary(chunkResponse.ToString()));
-                    
-                    i += length;
+                foreach (var chunkText in chunks)
+                {
+                    var chunkPrompt = BuildPrompt(
+                        modelDetails.Name,
+                        "Summarize the following section of the document, focusing on key operational and strategic points:",
+                        chunkText);
+
+                    chunkSummaries.Add(CleanSummary(await RunInferenceAsync(executor, chunkPrompt, inferenceParams, cancellationToken)));
                 }
 
-                logger.LogInformation("Chunking complete. Performing final map-reduce summarization on {Count} chunks.", chunkSummaries.Count);
-                string combinedSummaries = string.Join(Environment.NewLine + "---" + Environment.NewLine, chunkSummaries);
-                var finalPrompt = BuildPrompt(modelDetails.Name, systemPrompt, combinedSummaries);
-                
-                var finalResponse = new StringBuilder();
-                await foreach (var token in executor.InferAsync(finalPrompt, inferenceParams, cancellationToken))
-                {
-                    finalResponse.Append(token);
-                }
+                logger.LogInformation("Chunking complete. Performing map-reduce summarization on {Count} chunks.", chunkSummaries.Count);
 
-                var finalSummary = CleanSummary(finalResponse.ToString());
+                var finalSummary = await ReduceSummariesAsync(
+                    executor,
+                    chunkSummaries,
+                    modelDetails.Name,
+                    systemPrompt,
+                    inferenceParams,
+                    charBudget,
+                    cancellationToken);
+
                 logger.LogInformation(
                     "Summarization completed map-reduce using model {ModelPath}. ContextSize={ContextSize}. Output chars: {CharacterCount}",
                     modelPath,
@@ -194,6 +167,85 @@ namespace SummaryGenerator.Services
             }
 
             return $"### Instruction:\n{systemPrompt.Trim()}\n\n### Input:\n{documentText}\n\n### Response:\n";
+        }
+
+        private const int MaxReduceDepth = 8;
+
+        /// <summary>
+        /// Combines chunk summaries into one final summary, guaranteeing every prompt sent
+        /// to the model fits within <paramref name="charBudget"/>. When the combined text of
+        /// all summaries is too large for a single prompt, summaries are grouped into
+        /// budget-sized batches, each batch is combined with one inference call, and the
+        /// process recurses on the resulting (strictly fewer) summaries until one final
+        /// prompt fits.
+        /// </summary>
+        private async Task<string> ReduceSummariesAsync(
+            StatelessExecutor executor,
+            IReadOnlyList<string> summaries,
+            string modelName,
+            string systemPrompt,
+            InferenceParams inferenceParams,
+            int charBudget,
+            CancellationToken cancellationToken,
+            int depth = 0)
+        {
+            var combined = string.Join(Environment.NewLine + "---" + Environment.NewLine, summaries);
+
+            if (summaries.Count == 1 || combined.Length <= charBudget)
+            {
+                var finalPrompt = BuildPrompt(modelName, systemPrompt, combined);
+                return CleanSummary(await RunInferenceAsync(executor, finalPrompt, inferenceParams, cancellationToken));
+            }
+
+            if (depth >= MaxReduceDepth)
+            {
+                throw new InvalidOperationException(
+                    $"Document could not be summarized: the reduce step exceeded {MaxReduceDepth} levels without fitting the model's context window.");
+            }
+
+            logger.LogInformation(
+                "Reduce step {Depth}: {Count} summaries ({CombinedLength} chars) exceed the {Budget} char budget. Grouping and combining.",
+                depth, summaries.Count, combined.Length, charBudget);
+
+            var groups = DocumentChunker.GroupByCharBudget(summaries, s => s.Length, charBudget);
+            var nextLevelSummaries = new List<string>();
+
+            foreach (var group in groups)
+            {
+                if (group.Count == 1)
+                {
+                    // Oversized singleton: pass it through unchanged rather than spending an
+                    // extra inference call "combining" a group of one.
+                    nextLevelSummaries.Add(group[0]);
+                    continue;
+                }
+
+                var groupCombined = string.Join(Environment.NewLine + "---" + Environment.NewLine, group);
+                var groupPrompt = BuildPrompt(
+                    modelName,
+                    "Combine the following partial summaries into a single consolidated summary, preserving all key points:",
+                    groupCombined);
+
+                nextLevelSummaries.Add(CleanSummary(await RunInferenceAsync(executor, groupPrompt, inferenceParams, cancellationToken)));
+            }
+
+            return await ReduceSummariesAsync(executor, nextLevelSummaries, modelName, systemPrompt, inferenceParams, charBudget, cancellationToken, depth + 1);
+        }
+
+        private static async Task<string> RunInferenceAsync(
+            StatelessExecutor executor,
+            string prompt,
+            InferenceParams inferenceParams,
+            CancellationToken cancellationToken)
+        {
+            var response = new StringBuilder();
+
+            await foreach (var token in executor.InferAsync(prompt, inferenceParams, cancellationToken))
+            {
+                response.Append(token);
+            }
+
+            return response.ToString();
         }
 
         private string CleanSummary(string rawOutput)
