@@ -23,7 +23,8 @@ namespace SummaryGenerator.Services
         }
 
         // The prompt asks for a <scratchpad> to improve reasoning, and Gemma 4 can emit
-        // thought-channel tokens; neither belongs in the saved notes.
+        // thought-channel tokens; neither belongs in the saved notes. Never delete a Markdown
+        // heading line: a closed scratchpad block is removed only when it contains no heading.
         private static string RemoveReasoningArtifacts(string text)
         {
             var cleaned = GemmaThoughtChannelRegex().Replace(text, string.Empty);
@@ -39,7 +40,7 @@ namespace SummaryGenerator.Services
         [GeneratedRegex(@"<\|channel>|<channel\|>")]
         private static partial Regex GemmaChannelTokenRegex();
 
-        [GeneratedRegex(@"<scratchpad>.*?</scratchpad>", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+        [GeneratedRegex(@"<scratchpad>(?:(?!^[ \t]*#).)*?</scratchpad>", RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.IgnoreCase)]
         private static partial Regex ScratchpadBlockRegex();
 
         [GeneratedRegex(@"<scratchpad>.*?(?=^[ \t]*#)", RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.IgnoreCase)]
