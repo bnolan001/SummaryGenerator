@@ -56,25 +56,50 @@ namespace SummaryGenerator.Services
             return chunks;
         }
 
-        public static List<List<T>> GroupByCharBudget<T>(IReadOnlyList<T> items, Func<T, int> lengthSelector, int maxCharsPerGroup)
+        public static List<string> SplitToTokenBudget(string text, Func<string, int> countTokens, int maxTokens)
+        {
+            var tokens = countTokens(text);
+            if (tokens <= maxTokens)
+            {
+                return [text];
+            }
+
+            if (text.Length <= 1)
+            {
+                throw new InvalidOperationException(
+                    $"A single character exceeds the {maxTokens}-token budget; the prompt template leaves no room for content.");
+            }
+
+            var charBudget = (int)Math.Max(1, (long)text.Length * maxTokens / tokens);
+            var result = new List<string>();
+
+            foreach (var chunk in SplitIntoChunks(text, charBudget))
+            {
+                result.AddRange(SplitToTokenBudget(chunk, countTokens, maxTokens));
+            }
+
+            return result;
+        }
+
+        public static List<List<T>> GroupByBudget<T>(IReadOnlyList<T> items, Func<T, int> sizeSelector, int maxSizePerGroup)
         {
             var groups = new List<List<T>>();
             var currentGroup = new List<T>();
-            var currentLength = 0;
+            var currentSize = 0;
 
             foreach (var item in items)
             {
-                var itemLength = lengthSelector(item);
+                var itemSize = sizeSelector(item);
 
-                if (currentGroup.Count > 0 && currentLength + itemLength > maxCharsPerGroup)
+                if (currentGroup.Count > 0 && currentSize + itemSize > maxSizePerGroup)
                 {
                     groups.Add(currentGroup);
                     currentGroup = [];
-                    currentLength = 0;
+                    currentSize = 0;
                 }
 
                 currentGroup.Add(item);
-                currentLength += itemLength;
+                currentSize += itemSize;
             }
 
             if (currentGroup.Count > 0)

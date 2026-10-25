@@ -207,7 +207,7 @@ namespace SummaryGenerator.Services
                 "Reduce step {Depth}: {Count} summaries ({CombinedLength} chars) exceed the {Budget} char budget. Grouping and combining.",
                 depth, summaries.Count, combined.Length, charBudget);
 
-            var groups = DocumentChunker.GroupByCharBudget(summaries, s => s.Length, charBudget);
+            var groups = DocumentChunker.GroupByBudget(summaries, s => s.Length, charBudget);
             var nextLevelSummaries = new List<string>();
 
             foreach (var group in groups)
