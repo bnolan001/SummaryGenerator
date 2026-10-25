@@ -1,6 +1,8 @@
+using System.Text.RegularExpressions;
+
 namespace SummaryGenerator.Services
 {
-    public static class SummaryOutputCleaner
+    public static partial class SummaryOutputCleaner
     {
         public static string Clean(string rawOutput, IEnumerable<string> stopPhrases)
         {
@@ -9,7 +11,8 @@ namespace SummaryGenerator.Services
                 return string.Empty;
             }
 
-            var cleaned = RemoveLeadingModelControlLines(rawOutput.Trim());
+            var cleaned = RemoveReasoningArtifacts(rawOutput);
+            cleaned = RemoveLeadingModelControlLines(cleaned.Trim());
             var stopIndex = FindFirstStopPhraseIndex(cleaned, stopPhrases);
             if (stopIndex >= 0)
             {
@@ -18,6 +21,32 @@ namespace SummaryGenerator.Services
 
             return cleaned.Trim();
         }
+
+        // The prompt asks for a <scratchpad> to improve reasoning, and Gemma 4 can emit
+        // thought-channel tokens; neither belongs in the saved notes.
+        private static string RemoveReasoningArtifacts(string text)
+        {
+            var cleaned = GemmaThoughtChannelRegex().Replace(text, string.Empty);
+            cleaned = GemmaChannelTokenRegex().Replace(cleaned, string.Empty);
+            cleaned = ScratchpadBlockRegex().Replace(cleaned, string.Empty);
+            cleaned = UnclosedScratchpadBeforeHeadingRegex().Replace(cleaned, string.Empty);
+            return ScratchpadTagRegex().Replace(cleaned, string.Empty);
+        }
+
+        [GeneratedRegex(@"<\|channel>.*?<channel\|>", RegexOptions.Singleline)]
+        private static partial Regex GemmaThoughtChannelRegex();
+
+        [GeneratedRegex(@"<\|channel>|<channel\|>")]
+        private static partial Regex GemmaChannelTokenRegex();
+
+        [GeneratedRegex(@"<scratchpad>.*?</scratchpad>", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+        private static partial Regex ScratchpadBlockRegex();
+
+        [GeneratedRegex(@"<scratchpad>.*?(?=^[ \t]*#)", RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+        private static partial Regex UnclosedScratchpadBeforeHeadingRegex();
+
+        [GeneratedRegex(@"</?scratchpad>", RegexOptions.IgnoreCase)]
+        private static partial Regex ScratchpadTagRegex();
 
         private static string RemoveLeadingModelControlLines(string text)
         {
