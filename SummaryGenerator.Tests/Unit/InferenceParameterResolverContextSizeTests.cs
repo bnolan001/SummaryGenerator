@@ -81,5 +81,31 @@ namespace SummaryGenerator.Tests.Unit
             // maxAllowed = 8000 - ContextSafetyReserveTokens(2048) = 5952
             Assert.Equal(5952u, result);
         }
+
+        [Fact]
+        public void ResolveContextSize_SentinelZero_AutoTuneOn_UsesRecommendation()
+        {
+            var options = DefaultOptions();
+            options.ContextSize = 0;
+            var modelDetails = new ModelDetails { PreferredContextSize = null };
+            var plan = PlanWithRecommendedContextSize(recommendedContextSize: 16384);
+
+            var result = InferenceParameterResolver.ResolveContextSize(options, modelDetails, hardwareAutoTune: true, plan);
+
+            Assert.Equal(16384u, result);
+        }
+
+        [Fact]
+        public void ResolveContextSize_SentinelZero_AutoTuneOff_Uses8192()
+        {
+            var options = DefaultOptions();
+            options.ContextSize = 0;
+            var modelDetails = new ModelDetails { PreferredContextSize = null };
+            var plan = PlanWithRecommendedContextSize(recommendedContextSize: 16384);
+
+            var result = InferenceParameterResolver.ResolveContextSize(options, modelDetails, hardwareAutoTune: false, plan);
+
+            Assert.Equal(8192u, result);
+        }
     }
 }

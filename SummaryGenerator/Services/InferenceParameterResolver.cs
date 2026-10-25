@@ -31,9 +31,15 @@ namespace SummaryGenerator.Services
 
         private const uint MaxSafeContextSize = 32768;
 
+        // Previously shipped default; used when ContextSize is the 0 ("auto") sentinel but auto-tune is off.
+        private const uint ContextSizeWhenUnsetAndAutoTuneOff = 8192;
+
         public static uint ResolveContextSize(SummarizationOptions options, ModelDetails modelDetails, bool hardwareAutoTune, HardwarePlan plan)
         {
-            var desired = modelDetails.PreferredContextSize.GetValueOrDefault(options.ContextSize);
+            var configuredContextSize = options.ContextSize > 0
+                ? options.ContextSize
+                : hardwareAutoTune ? plan.RecommendedContextSize : ContextSizeWhenUnsetAndAutoTuneOff;
+            var desired = modelDetails.PreferredContextSize.GetValueOrDefault(configuredContextSize);
 
             if (hardwareAutoTune)
             {

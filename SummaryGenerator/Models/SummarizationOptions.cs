@@ -4,7 +4,12 @@ namespace SummaryGenerator.Models
     {
         public const string SectionName = "Summarization";
 
-        public uint ContextSize { get; set; } = 32768;
+        /// <summary>
+        /// Context window in tokens. 0 = auto: the hardware recommendation when
+        /// <see cref="HardwareAutoTune"/> is true, otherwise 8192. A model's
+        /// PreferredContextSize takes precedence over this value.
+        /// </summary>
+        public uint ContextSize { get; set; } = 0;
 
         public uint MinimumContextSize { get; set; } = 4096;
 
