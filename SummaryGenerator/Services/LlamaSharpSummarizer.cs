@@ -10,6 +10,7 @@ namespace SummaryGenerator.Services
 {
     public class LlamaSharpSummarizer(
         IOptions<SummarizationOptions> options,
+        IHardwareProfileService hardwareProfileService,
         ILogger<LlamaSharpSummarizer> logger) : ILlamaSharpSummarizer
     {
         private readonly SummarizationOptions _options = options.Value;
@@ -46,14 +47,29 @@ namespace SummaryGenerator.Services
 
             try
             {
-                var resolvedContextSize = ResolveContextSize(modelDetails);
+                var hardwarePlan = hardwareProfileService.GetPlan();
+                var resolvedContextSize = InferenceParameterResolver.ResolveContextSize(_options, modelDetails, _options.HardwareAutoTune, hardwarePlan);
+                var resolvedThreads = InferenceParameterResolver.ResolveThreads(_options.Threads, hardwarePlan);
+                var resolvedGpuLayerCount = InferenceParameterResolver.ResolveGpuLayerCount(_options.GpuLayerCount, _options.HardwareAutoTune, hardwarePlan);
+                var resolvedBatchSize = InferenceParameterResolver.ResolveBatchSize(_options.BatchSize, _options.HardwareAutoTune, hardwarePlan);
+
                 var modelParams = new ModelParams(modelPath)
                 {
                     ContextSize = resolvedContextSize,
-                    Threads = ResolveThreadCount(_options.Threads),
-                    GpuLayerCount = _options.GpuLayerCount,
+                    Threads = resolvedThreads,
+                    GpuLayerCount = resolvedGpuLayerCount,
                     FlashAttention = _options.FlashAttention
                 };
+
+                if (resolvedBatchSize > 0)
+                {
+                    modelParams.BatchSize = (uint)resolvedBatchSize;
+                    modelParams.UBatchSize = (uint)resolvedBatchSize;
+                }
+
+                logger.LogInformation(
+                    "Resolved inference parameters: ContextSize={ContextSize}, Threads={Threads}, GpuLayerCount={GpuLayerCount}, BatchSize={BatchSize}, HardwareAutoTune={HardwareAutoTune}, GpuTier={GpuTier}",
+                    resolvedContextSize, resolvedThreads, resolvedGpuLayerCount, resolvedBatchSize, _options.HardwareAutoTune, hardwarePlan.GpuTier);
 
                 using var weights = LLamaWeights.LoadFromFile(modelParams);
                 var executor = new StatelessExecutor(weights, modelParams);
@@ -180,52 +196,9 @@ namespace SummaryGenerator.Services
             return $"### Instruction:\n{systemPrompt.Trim()}\n\n### Input:\n{documentText}\n\n### Response:\n";
         }
 
-        private const uint MaxSafeContextSize = 32768;
-
-        private uint ResolveContextSize(ModelDetails modelDetails)
-        {
-            var desired = modelDetails.PreferredContextSize.GetValueOrDefault(_options.ContextSize);
-            if (desired < _options.MinimumContextSize)
-            {
-                desired = _options.MinimumContextSize;
-            }
-
-            // Hard cap to prevent native crashes due to VRAM/RAM exhaustion
-            if (desired > MaxSafeContextSize)
-            {
-                desired = MaxSafeContextSize;
-            }
-
-            if (modelDetails.MaxContextSize is > 0)
-            {
-                var maxAllowed = modelDetails.MaxContextSize.Value;
-                if (_options.ContextSafetyReserveTokens > 0 && _options.ContextSafetyReserveTokens < maxAllowed)
-                {
-                    maxAllowed -= _options.ContextSafetyReserveTokens;
-                }
-
-                if (maxAllowed > 0 && desired > maxAllowed)
-                {
-                    desired = maxAllowed;
-                }
-            }
-
-            return desired;
-        }
-
         private string CleanSummary(string rawOutput)
         {
             return SummaryOutputCleaner.Clean(rawOutput, _options.StopPhrases);
-        }
-
-        private static int ResolveThreadCount(int configuredThreads)
-        {
-            if (configuredThreads > 0)
-            {
-                return configuredThreads;
-            }
-
-            return Math.Max(1, Environment.ProcessorCount - 2);
         }
     }
 }

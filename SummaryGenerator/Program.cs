@@ -15,6 +15,7 @@ builder.Services.Configure<SummarizationOptions>(builder.Configuration.GetSectio
 builder.Services.Configure<UploadOptions>(builder.Configuration.GetSection(UploadOptions.SectionName));
 builder.Services.AddScoped<IProgress, ProgressReporter>();
 builder.Services.AddHttpClient<IHuggingFaceRepository, HuggingFaceRepository>();
+builder.Services.AddSingleton<IHardwareProfileService, HardwareProfileService>();
 builder.Services.AddSingleton<IPdfTextExtractor, PdfTextExtractor>();
 builder.Services.AddSingleton<ILlamaSharpSummarizer, LlamaSharpSummarizer>();
 builder.Services.AddSingleton<IMarkdownOutputWriter, MarkdownOutputWriter>();
@@ -24,6 +25,10 @@ builder.Services.AddSingleton<IProcessingQueue, QueueProcessor>();
 builder.Services.AddHostedService(provider => (QueueProcessor)provider.GetRequiredService<IProcessingQueue>());
 
 var app = builder.Build();
+
+// Detect hardware eagerly so the recommended inference parameters are logged at
+// startup, before any summarization task runs.
+app.Services.GetRequiredService<IHardwareProfileService>().GetPlan();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
