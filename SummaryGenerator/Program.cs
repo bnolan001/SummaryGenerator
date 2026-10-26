@@ -14,6 +14,7 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
     builder.Configuration.AddEnvironmentVariables();
+    LogPathResolver.AnchorFileSinkPaths(builder.Configuration, builder.Environment.ContentRootPath);
 
     builder.Host.UseSerilog((context, services, configuration) => configuration
         .ReadFrom.Configuration(context.Configuration)
@@ -44,8 +45,6 @@ try
     // Detect hardware eagerly so the recommended inference parameters are logged at
     // startup, before any summarization task runs.
     app.Services.GetRequiredService<IHardwareProfileService>().GetPlan();
-
-    app.UseSerilogRequestLogging();
 
     // Configure the HTTP request pipeline.
     if (!app.Environment.IsDevelopment())
