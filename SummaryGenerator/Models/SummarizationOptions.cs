@@ -4,7 +4,12 @@ namespace SummaryGenerator.Models
     {
         public const string SectionName = "Summarization";
 
-        public uint ContextSize { get; set; } = 32768;
+        /// <summary>
+        /// Context window in tokens. 0 = auto: the hardware recommendation when
+        /// <see cref="HardwareAutoTune"/> is true, otherwise 8192. A model's
+        /// PreferredContextSize takes precedence over this value.
+        /// </summary>
+        public uint ContextSize { get; set; } = 0;
 
         public uint MinimumContextSize { get; set; } = 4096;
 
@@ -12,7 +17,24 @@ namespace SummaryGenerator.Models
 
         public int Threads { get; set; } = 0;
 
-        public int GpuLayerCount { get; set; } = 0;
+        /// <summary>
+        /// Number of model layers to offload to GPU. -1 = let hardware auto-tune decide
+        /// (when <see cref="HardwareAutoTune"/> is true); 0 = explicitly force CPU-only.
+        /// </summary>
+        public int GpuLayerCount { get; set; } = -1;
+
+        /// <summary>
+        /// Prompt-processing batch size. 0 = let hardware auto-tune decide (when
+        /// <see cref="HardwareAutoTune"/> is true, otherwise the library default is used).
+        /// </summary>
+        public int BatchSize { get; set; } = 0;
+
+        /// <summary>
+        /// When true, <see cref="GpuLayerCount"/>/<see cref="BatchSize"/> sentinel values and
+        /// the resolved context size are filled in from detected hardware. An explicit
+        /// (non-sentinel) value always wins over the recommendation.
+        /// </summary>
+        public bool HardwareAutoTune { get; set; } = true;
 
         public bool FlashAttention { get; set; } = false;
 

@@ -39,5 +39,66 @@ namespace SummaryGenerator.Tests.Unit
 
             Assert.Equal("## Executive Summary\nBody", cleaned);
         }
+
+        [Fact]
+        public void Clean_RemovesScratchpadBlockAndGemmaChannelToken()
+        {
+            var raw = "<channel|><scratchpad>\n- Theme 1: x\n- Theme 2: y\n</scratchpad>\n\n# 1. Executive Summary\nBody";
+            var cleaned = SummaryOutputCleaner.Clean(raw, []);
+
+            Assert.Equal("# 1. Executive Summary\nBody", cleaned);
+        }
+
+        [Fact]
+        public void Clean_RemovesScratchpadBlockCaseInsensitively()
+        {
+            var raw = "<Scratchpad>notes</SCRATCHPAD>\n# 1. Executive Summary\nBody";
+            var cleaned = SummaryOutputCleaner.Clean(raw, []);
+
+            Assert.Equal("# 1. Executive Summary\nBody", cleaned);
+        }
+
+        [Fact]
+        public void Clean_RemovesUnclosedScratchpadUpToFirstHeading()
+        {
+            var raw = "<scratchpad>\n- Theme 1: x\n\n# 1. Executive Summary\nBody";
+            var cleaned = SummaryOutputCleaner.Clean(raw, []);
+
+            Assert.Equal("# 1. Executive Summary\nBody", cleaned);
+        }
+
+        [Fact]
+        public void Clean_KeepsUnclosedScratchpadContentWhenNoHeadingFollows()
+        {
+            var raw = "<scratchpad>\nOnly content the model produced";
+            var cleaned = SummaryOutputCleaner.Clean(raw, []);
+
+            Assert.Equal("Only content the model produced", cleaned);
+        }
+
+        [Fact]
+        public void Clean_ScratchpadClosedAfterSections_KeepsSections()
+        {
+            var raw = "<scratchpad>\n- Theme\n# 1. Executive Summary\nBody\n</scratchpad>";
+
+            Assert.Equal("# 1. Executive Summary\nBody", SummaryOutputCleaner.Clean(raw, []));
+        }
+
+        [Fact]
+        public void Clean_ScratchpadBlockBetweenSections_IsRemoved()
+        {
+            var raw = "# 1. Executive Summary\nBody\n<scratchpad>note</scratchpad>\n# 2. Key Terms\nTerms";
+
+            Assert.Equal("# 1. Executive Summary\nBody\n\n# 2. Key Terms\nTerms", SummaryOutputCleaner.Clean(raw, []));
+        }
+
+        [Fact]
+        public void Clean_RemovesGemmaThoughtChannelBlock()
+        {
+            var raw = "<|channel>thought\nprivate reasoning<channel|># 1. Executive Summary\nBody";
+            var cleaned = SummaryOutputCleaner.Clean(raw, []);
+
+            Assert.Equal("# 1. Executive Summary\nBody", cleaned);
+        }
     }
 }
