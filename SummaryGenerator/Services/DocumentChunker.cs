@@ -58,39 +58,48 @@ namespace SummaryGenerator.Services
 
             // Cut the text into small units (~1/32 of a chunk) and pack them greedily, so each chunk
             // fills its budget instead of leaving a small leftover fragment that costs a full model call.
+            // Additive unit counts can drift from the real tokenizer at unit boundaries, so each packed
+            // chunk is verified and, if over budget, gives its last units back to the next chunk.
             var overhead = countTokens(string.Empty);
             var unitChars = (int)Math.Max(1, (long)text.Length * maxTokens / tokens / 32);
             var units = SplitIntoChunks(text, unitChars);
-            var groups = GroupByBudget(units, unit => countTokens(unit) - overhead, maxTokens - overhead);
+            var unitTokens = units.Select(unit => countTokens(unit) - overhead).ToList();
+            var contentBudget = maxTokens - overhead;
 
             var result = new List<string>();
-            foreach (var group in groups)
+            var start = 0;
+            while (start < units.Count)
             {
-                AddWithinBudget(group, countTokens, maxTokens, result);
+                var end = start;
+                var estimate = 0;
+                while (end < units.Count && (end == start || estimate + unitTokens[end] <= contentBudget))
+                {
+                    estimate += unitTokens[end];
+                    end++;
+                }
+
+                while (true)
+                {
+                    var chunk = string.Concat(units.Skip(start).Take(end - start));
+                    if (countTokens(chunk) <= maxTokens)
+                    {
+                        result.Add(chunk);
+                        break;
+                    }
+
+                    if (end - start == 1)
+                    {
+                        result.AddRange(SplitToTokenBudget(chunk, countTokens, maxTokens));
+                        break;
+                    }
+
+                    end--;
+                }
+
+                start = end;
             }
 
             return result;
-        }
-
-        // Additive unit counts can drift slightly from the real tokenizer at unit boundaries, so each
-        // packed chunk is verified; an over-budget group is halved (always smaller, so this terminates).
-        private static void AddWithinBudget(List<string> group, Func<string, int> countTokens, int maxTokens, List<string> result)
-        {
-            var chunk = string.Concat(group);
-            if (countTokens(chunk) <= maxTokens)
-            {
-                result.Add(chunk);
-            }
-            else if (group.Count == 1)
-            {
-                result.AddRange(SplitToTokenBudget(chunk, countTokens, maxTokens));
-            }
-            else
-            {
-                var half = group.Count / 2;
-                AddWithinBudget(group[..half], countTokens, maxTokens, result);
-                AddWithinBudget(group[half..], countTokens, maxTokens, result);
-            }
         }
 
         public static List<List<T>> GroupByBudget<T>(IReadOnlyList<T> items, Func<T, int> sizeSelector, int maxSizePerGroup)
