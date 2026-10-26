@@ -12,6 +12,12 @@ namespace SummaryGenerator.Models
         Integrated,
 
         /// <summary>At least one discrete GPU (dedicated VRAM) was detected.</summary>
-        Discrete
+        Discrete,
+
+        /// <summary>
+        /// Recent integrated graphics (Intel Arc, AMD Radeon 7xxM/8xxM/8050S/8060S) that run inference
+        /// faster than the CPU. Shares system RAM, so offload is subject to a model-size guard.
+        /// </summary>
+        ModernIntegrated
     }
 }

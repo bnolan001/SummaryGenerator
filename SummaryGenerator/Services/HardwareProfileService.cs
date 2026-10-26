@@ -32,6 +32,14 @@ namespace SummaryGenerator.Services
         [GeneratedRegex(@"\bArc(?:\(TM\))?\s+(?:Pro\s+)?[AB]\d{2,3}[A-Z]?\s+Graphics", RegexOptions.IgnoreCase)]
         private static partial Regex IntelArcDiscreteRegex();
 
+        // Integrated GPUs benchmarked (Arc 140V) or known to outrun the CPU for llama.cpp inference.
+        // Checked only after discrete detection, so any remaining "Arc" name is integrated.
+        [GeneratedRegex(@"\bArc\b|\bRadeon(?:\(TM\))?\s+(?:[78]\d0M|80[56]0S)\b", RegexOptions.IgnoreCase)]
+        private static partial Regex ModernIntegratedRegex();
+
+        /// <summary>llama.cpp layer count meaning "offload every layer" (larger than any model's layer count).</summary>
+        public const int AllGpuLayers = 999;
+
         /// <summary>
         /// Classifies the overall GPU tier from the names of every detected video adapter.
         /// Scans all adapters (not just the first) so a discrete GPU is recognized even when
@@ -53,7 +61,12 @@ namespace SummaryGenerator.Services
                 IntelArcDiscreteRegex().IsMatch(name) ||
                 DiscretePatterns.Any(pattern => name.Contains(pattern, StringComparison.OrdinalIgnoreCase)));
 
-            return anyDiscrete ? GpuTier.Discrete : GpuTier.Integrated;
+            if (anyDiscrete)
+            {
+                return GpuTier.Discrete;
+            }
+
+            return names.Any(name => ModernIntegratedRegex().IsMatch(name)) ? GpuTier.ModernIntegrated : GpuTier.Integrated;
         }
 
         private const double BytesPerGb = 1024.0 * 1024 * 1024;
@@ -66,7 +79,12 @@ namespace SummaryGenerator.Services
         {
             var recommendedThreads = Math.Max(1, logicalCores - 2);
 
-            var recommendedGpuLayerCount = gpuTier == GpuTier.Discrete ? 32 : 0;
+            var recommendedGpuLayerCount = gpuTier switch
+            {
+                GpuTier.Discrete => 32,
+                GpuTier.ModernIntegrated => AllGpuLayers,
+                _ => 0
+            };
 
             var totalMemoryGb = totalMemoryBytes / BytesPerGb;
             var recommendedContextSize = totalMemoryGb switch

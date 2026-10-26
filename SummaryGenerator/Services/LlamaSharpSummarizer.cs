@@ -48,7 +48,12 @@ namespace SummaryGenerator.Services
                 var hardwarePlan = hardwareProfileService.GetPlan();
                 var resolvedContextSize = InferenceParameterResolver.ResolveContextSize(_options, modelDetails, _options.HardwareAutoTune, hardwarePlan);
                 var resolvedThreads = InferenceParameterResolver.ResolveThreads(_options.Threads, hardwarePlan);
-                var resolvedGpuLayerCount = InferenceParameterResolver.ResolveGpuLayerCount(_options.GpuLayerCount, _options.HardwareAutoTune, hardwarePlan);
+                var resolvedGpuLayerCount = InferenceParameterResolver.ResolveGpuLayerCount(
+                    _options.GpuLayerCount,
+                    _options.HardwareAutoTune,
+                    hardwarePlan,
+                    new FileInfo(modelPath).Length,
+                    _options.IntegratedGpuMaxModelPercentOfRam);
                 var resolvedBatchSize = InferenceParameterResolver.ResolveBatchSize(_options.BatchSize, _options.HardwareAutoTune, hardwarePlan);
 
                 var modelParams = new ModelParams(modelPath)

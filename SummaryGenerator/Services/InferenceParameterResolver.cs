@@ -9,14 +9,31 @@ namespace SummaryGenerator.Services
             return configuredThreads > 0 ? configuredThreads : plan.RecommendedThreads;
         }
 
-        public static int ResolveGpuLayerCount(int configuredGpuLayerCount, bool hardwareAutoTune, HardwarePlan plan)
+        public static int ResolveGpuLayerCount(
+            int configuredGpuLayerCount,
+            bool hardwareAutoTune,
+            HardwarePlan plan,
+            long modelFileBytes,
+            int integratedGpuMaxModelPercentOfRam)
         {
             if (configuredGpuLayerCount >= 0)
             {
                 return configuredGpuLayerCount;
             }
 
-            return hardwareAutoTune ? plan.RecommendedGpuLayerCount : 0;
+            if (!hardwareAutoTune)
+            {
+                return 0;
+            }
+
+            // An integrated GPU borrows system RAM; only offload models that leave plenty of it free.
+            if (plan.GpuTier == GpuTier.ModernIntegrated &&
+                modelFileBytes > plan.TotalMemoryBytes / 100 * integratedGpuMaxModelPercentOfRam)
+            {
+                return 0;
+            }
+
+            return plan.RecommendedGpuLayerCount;
         }
 
         public static int ResolveBatchSize(int configuredBatchSize, bool hardwareAutoTune, HardwarePlan plan)
