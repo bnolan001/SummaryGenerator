@@ -20,6 +20,8 @@ namespace SummaryGenerator.Tests.Unit
         [InlineData("Intel(R) Arc(TM) 130V GPU")]
         [InlineData("Intel(R) Arc(TM) 140T GPU")]
         [InlineData("Intel(R) Arc(TM) Graphics")]
+        [InlineData("Intel(R) Arc(TM) B390 GPU")]
+        [InlineData("Intel(R) Arc(TM) B370 GPU")]
         public void ClassifyGpu_IntelArcIntegrated_ReturnsIntegrated(string name)
         {
             Assert.Equal(GpuTier.Integrated, HardwareProfileService.ClassifyGpu([name]));

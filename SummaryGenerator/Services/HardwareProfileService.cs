@@ -26,9 +26,10 @@ namespace SummaryGenerator.Services
         // Microsoft-named adapters are software/virtual (Basic Render/Display, Remote Display, Hyper-V).
         private const string IgnoredAdapterPattern = "Microsoft";
 
-        // Intel Arc discrete cards carry an A/B model number (A770, A370M, B580, Pro A60);
-        // integrated Arc names don't (Arc 140V, Arc 130V, Arc 140T, Arc Graphics).
-        [GeneratedRegex(@"\bArc(?:\(TM\))?\s+(?:Pro\s+)?[AB]\d{2,3}", RegexOptions.IgnoreCase)]
+        // Intel Arc discrete cards report an A/B model number followed by "Graphics" (A770 Graphics,
+        // A370M Graphics, B580 Graphics, Pro A60 Graphics); integrated Arc names don't (Arc 140V GPU,
+        // Arc Graphics, and Panther Lake's Arc B390 GPU / B370 GPU).
+        [GeneratedRegex(@"\bArc(?:\(TM\))?\s+(?:Pro\s+)?[AB]\d{2,3}[A-Z]?\s+Graphics", RegexOptions.IgnoreCase)]
         private static partial Regex IntelArcDiscreteRegex();
 
         /// <summary>
