@@ -1,26 +1,12 @@
 namespace SummaryGenerator.Services
 {
     /// <summary>
-    /// Pure, context-size-aware helpers for splitting a document into map-reduce chunks
+    /// Pure, token-budget-aware helpers for splitting a document into map-reduce chunks
     /// and for grouping partial summaries into prompt-budget-sized batches during the
-    /// reduce step. No native/LLM calls happen here, so this is fully unit testable.
+    /// reduce step. Token counting is injected, so this is fully unit testable.
     /// </summary>
     public static class DocumentChunker
     {
-        private const double CharsPerToken = 3.3;
-
-        public static int EstimateCharBudget(uint contextSize, uint reserveTokens, int minimumChars = 4000)
-        {
-            var availableTokens = (long)contextSize - reserveTokens;
-            if (availableTokens <= 0)
-            {
-                return minimumChars;
-            }
-
-            var budget = (int)(availableTokens * CharsPerToken);
-            return Math.Max(budget, minimumChars);
-        }
-
         public static List<string> SplitIntoChunks(string text, int maxChunkChars)
         {
             var chunks = new List<string>();
