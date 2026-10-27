@@ -18,7 +18,11 @@ namespace SummaryGenerator.Pages
         private readonly IPromptProfileStore _promptProfileStore;
         private readonly IHuggingFaceRepository _huggingFaceRepository;
         private readonly IAudioGenerator _audioGenerator;
+        private readonly IHardwareProfileService _hardwareProfileService;
+        private readonly SummarizationOptions _summarizationOptions;
         private readonly ILogger<IndexModel> _logger;
+
+        private const string RecommendedSuffix = " (recommended for this PC)";
 
         public IndexModel(
             IOptions<ModelsOptions> modelsOptions,
@@ -29,6 +33,8 @@ namespace SummaryGenerator.Pages
             IPromptProfileStore promptProfileStore,
             IHuggingFaceRepository huggingFaceRepository,
             IAudioGenerator audioGenerator,
+            IHardwareProfileService hardwareProfileService,
+            IOptions<SummarizationOptions> summarizationOptions,
             ILogger<IndexModel> logger)
         {
             _modelsOptions = modelsOptions.Value;
@@ -39,6 +45,8 @@ namespace SummaryGenerator.Pages
             _promptProfileStore = promptProfileStore;
             _huggingFaceRepository = huggingFaceRepository;
             _audioGenerator = audioGenerator;
+            _hardwareProfileService = hardwareProfileService;
+            _summarizationOptions = summarizationOptions.Value;
             _logger = logger;
         }
 
@@ -377,10 +385,15 @@ namespace SummaryGenerator.Pages
                 SelectedPromptProfileId = _promptProfileStore.DefaultProfileId;
             }
 
+            var recommendedModelName = ModelRecommender.Recommend(
+                models,
+                _hardwareProfileService.GetPlan().TotalMemoryBytes,
+                _summarizationOptions.IntegratedGpuMaxModelPercentOfRam)?.Name;
+
             ModelChoices = models
                 .Select(model => new SelectListItem
                 {
-                    Text = model.Name,
+                    Text = model.Name == recommendedModelName ? model.Name + RecommendedSuffix : model.Name,
                     Value = model.Name,
                     Selected = string.Equals(model.Name, SelectedModelName, StringComparison.OrdinalIgnoreCase)
                 })
@@ -426,6 +439,7 @@ namespace SummaryGenerator.Pages
                         Repository = model.Repository,
                         FileName = model.FileName,
                         IsDownloaded = exists,
+                        IsRecommended = model.Name == recommendedModelName,
                         LocalPath = modelPath,
                         SizeBytes = sizeBytes
                     };
@@ -543,6 +557,8 @@ namespace SummaryGenerator.Pages
             public required string FileName { get; init; }
 
             public required bool IsDownloaded { get; init; }
+
+            public bool IsRecommended { get; init; }
 
             public required string LocalPath { get; init; }
 
