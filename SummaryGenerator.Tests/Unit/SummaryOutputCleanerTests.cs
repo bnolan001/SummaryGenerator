@@ -93,6 +93,22 @@ namespace SummaryGenerator.Tests.Unit
         }
 
         [Fact]
+        public void Clean_RemovesThinkBlock()
+        {
+            var raw = "<think>\nOkay, I need to analyze the text.\n</think>\n\n# 1. Executive Summary\nBody";
+
+            Assert.Equal("# 1. Executive Summary\nBody", SummaryOutputCleaner.Clean(raw, []));
+        }
+
+        [Fact]
+        public void Clean_RemovesUnclosedThinkUpToFirstHeading()
+        {
+            var raw = "<think>\nreasoning cut off\n# 1. Executive Summary\nBody";
+
+            Assert.Equal("# 1. Executive Summary\nBody", SummaryOutputCleaner.Clean(raw, []));
+        }
+
+        [Fact]
         public void Clean_RemovesGemmaThoughtChannelBlock()
         {
             var raw = "<|channel>thought\nprivate reasoning<channel|># 1. Executive Summary\nBody";

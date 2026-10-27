@@ -22,16 +22,17 @@ namespace SummaryGenerator.Services
             return cleaned.Trim();
         }
 
-        // The prompt asks for a <scratchpad> to improve reasoning, and Gemma 4 can emit
-        // thought-channel tokens; neither belongs in the saved notes. Never delete a Markdown
-        // heading line: a closed scratchpad block is removed only when it contains no heading.
+        // The prompt asks for a <scratchpad> to improve reasoning, reasoning models (Phi-4 Mini)
+        // emit <think> blocks, and Gemma 4 can emit thought-channel tokens; none belong in the saved
+        // notes. Never delete a Markdown heading line: a closed block is removed only when it
+        // contains no heading.
         private static string RemoveReasoningArtifacts(string text)
         {
             var cleaned = GemmaThoughtChannelRegex().Replace(text, string.Empty);
             cleaned = GemmaChannelTokenRegex().Replace(cleaned, string.Empty);
-            cleaned = ScratchpadBlockRegex().Replace(cleaned, string.Empty);
-            cleaned = UnclosedScratchpadBeforeHeadingRegex().Replace(cleaned, string.Empty);
-            return ScratchpadTagRegex().Replace(cleaned, string.Empty);
+            cleaned = ReasoningBlockRegex().Replace(cleaned, string.Empty);
+            cleaned = UnclosedReasoningBeforeHeadingRegex().Replace(cleaned, string.Empty);
+            return ReasoningTagRegex().Replace(cleaned, string.Empty);
         }
 
         [GeneratedRegex(@"<\|channel>.*?<channel\|>", RegexOptions.Singleline)]
@@ -40,14 +41,14 @@ namespace SummaryGenerator.Services
         [GeneratedRegex(@"<\|channel>|<channel\|>")]
         private static partial Regex GemmaChannelTokenRegex();
 
-        [GeneratedRegex(@"<scratchpad>(?:(?!^[ \t]*#).)*?</scratchpad>", RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.IgnoreCase)]
-        private static partial Regex ScratchpadBlockRegex();
+        [GeneratedRegex(@"<(scratchpad|think)>(?:(?!^[ \t]*#).)*?</\1>", RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+        private static partial Regex ReasoningBlockRegex();
 
-        [GeneratedRegex(@"<scratchpad>.*?(?=^[ \t]*#)", RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.IgnoreCase)]
-        private static partial Regex UnclosedScratchpadBeforeHeadingRegex();
+        [GeneratedRegex(@"<(?:scratchpad|think)>.*?(?=^[ \t]*#)", RegexOptions.Singleline | RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+        private static partial Regex UnclosedReasoningBeforeHeadingRegex();
 
-        [GeneratedRegex(@"</?scratchpad>", RegexOptions.IgnoreCase)]
-        private static partial Regex ScratchpadTagRegex();
+        [GeneratedRegex(@"</?(?:scratchpad|think)>", RegexOptions.IgnoreCase)]
+        private static partial Regex ReasoningTagRegex();
 
         private static string RemoveLeadingModelControlLines(string text)
         {
