@@ -115,9 +115,19 @@ Computed once, cached for the process lifetime (singleton). Exposes a
   so it's computed once and shared).
 - `RecommendedGpuLayerCount`:
   - `GpuTier == None` → `0`
-  - `GpuTier == Integrated` → `0` (confirmed: iGPU offload defaults off;
-    shared-RAM iGPUs are assumed net-negative unless the user opts in by
+  - `GpuTier == Integrated` → `0` (older iGPUs such as Intel UHD/Iris Xe
+    or AMD Vega are assumed net-negative unless the user opts in by
     setting an explicit value)
+  - `GpuTier == ModernIntegrated` → all layers (`999`), **revised
+    2026-10-26 after benchmarking**. Applies to Intel Arc integrated and
+    AMD Radeon 7xxM/8xxM/8050S/8060S. Applied only when the model file is
+    at most `Summarization:IntegratedGpuMaxModelPercentOfRam` (default 40)
+    percent of total RAM, since the iGPU borrows system memory; larger
+    models stay on CPU. Measured on an Intel Arc 140V (32 GB RAM, Vulkan),
+    full offload compared to 0 layers: Phi-4 Mini read the prompt at
+    141 vs 96 tok/s and generated 9.9 vs 2.8 tok/s; Gemma 12B read at
+    84 vs 49 tok/s and generated 4.8 vs 3.3 tok/s. A CPU-only backend read
+    at just 20 tok/s.
   - `GpuTier == Discrete` → `32` (a reasonable default partial-offload
     count; still capped at runtime by however many layers the loaded
     model actually has)

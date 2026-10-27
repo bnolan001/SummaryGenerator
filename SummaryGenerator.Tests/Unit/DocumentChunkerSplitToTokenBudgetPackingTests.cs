@@ -32,6 +32,10 @@ namespace SummaryGenerator.Tests.Unit
 
             Assert.All(chunks, chunk => Assert.True(Count(chunk) <= maxTokens));
             Assert.Equal(text, string.Concat(chunks));
+
+            // An over-budget group must give back only its last units, not be cut in half.
+            var minimalChunkCount = (int)Math.Ceiling(text.Length / (double)(maxTokens - 300 - 400));
+            Assert.True(chunks.Count <= minimalChunkCount + 1, $"{chunks.Count} chunks; minimal is {minimalChunkCount}");
         }
     }
 }

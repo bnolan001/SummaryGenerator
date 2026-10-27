@@ -24,6 +24,12 @@ namespace SummaryGenerator.Models
         public int GpuLayerCount { get; set; } = -1;
 
         /// <summary>
+        /// With auto-tune on a modern integrated GPU (shares system RAM), every layer is offloaded
+        /// only when the model file is at most this percentage of total RAM; larger models stay on CPU.
+        /// </summary>
+        public int IntegratedGpuMaxModelPercentOfRam { get; set; } = 40;
+
+        /// <summary>
         /// Prompt-processing batch size. 0 = let hardware auto-tune decide (when
         /// <see cref="HardwareAutoTune"/> is true, otherwise the library default is used).
         /// </summary>

@@ -22,6 +22,7 @@ namespace SummaryGenerator.Tests.Unit
         [Theory]
         [InlineData(GpuTier.None, 0)]
         [InlineData(GpuTier.Integrated, 0)]
+        [InlineData(GpuTier.ModernIntegrated, HardwareProfileService.AllGpuLayers)]
         [InlineData(GpuTier.Discrete, 32)]
         public void ComputePlan_RecommendedGpuLayerCount_DependsOnGpuTier(GpuTier gpuTier, int expectedLayers)
         {
@@ -45,6 +46,7 @@ namespace SummaryGenerator.Tests.Unit
         [Theory]
         [InlineData(GpuTier.None, 256)]
         [InlineData(GpuTier.Integrated, 512)]
+        [InlineData(GpuTier.ModernIntegrated, 512)]
         [InlineData(GpuTier.Discrete, 512)]
         public void ComputePlan_RecommendedBatchSize_IsHigherWithAnyGpu(GpuTier gpuTier, int expectedBatchSize)
         {

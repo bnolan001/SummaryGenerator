@@ -14,6 +14,49 @@ namespace SummaryGenerator.Tests.Unit
             RecommendedContextSize: 16384,
             RecommendedBatchSize: 512);
 
+        private const long Gb = 1024L * 1024 * 1024;
+        private const long SmallModelBytes = 3 * Gb;
+        private const int MaxModelPercentOfRam = 40;
+
+        private static readonly HardwarePlan ModernIntegratedPlan = Plan with
+        {
+            GpuTier = GpuTier.ModernIntegrated,
+            RecommendedGpuLayerCount = HardwareProfileService.AllGpuLayers
+        };
+
+        [Fact]
+        public void ResolveGpuLayerCount_ModernIntegrated_ModelWithinGuard_OffloadsAllLayers()
+        {
+            // 32 GB RAM * 40% = 12.8 GB; a 7 GB model fits.
+            var result = InferenceParameterResolver.ResolveGpuLayerCount(-1, true, ModernIntegratedPlan, 7 * Gb, MaxModelPercentOfRam);
+
+            Assert.Equal(HardwareProfileService.AllGpuLayers, result);
+        }
+
+        [Fact]
+        public void ResolveGpuLayerCount_ModernIntegrated_ModelExceedsGuard_StaysOnCpu()
+        {
+            var result = InferenceParameterResolver.ResolveGpuLayerCount(-1, true, ModernIntegratedPlan, 16 * Gb, MaxModelPercentOfRam);
+
+            Assert.Equal(0, result);
+        }
+
+        [Fact]
+        public void ResolveGpuLayerCount_ModernIntegrated_ExplicitConfig_IgnoresGuard()
+        {
+            var result = InferenceParameterResolver.ResolveGpuLayerCount(20, true, ModernIntegratedPlan, 16 * Gb, MaxModelPercentOfRam);
+
+            Assert.Equal(20, result);
+        }
+
+        [Fact]
+        public void ResolveGpuLayerCount_Discrete_LargeModel_GuardDoesNotApply()
+        {
+            var result = InferenceParameterResolver.ResolveGpuLayerCount(-1, true, Plan, 16 * Gb, MaxModelPercentOfRam);
+
+            Assert.Equal(Plan.RecommendedGpuLayerCount, result);
+        }
+
         [Fact]
         public void ResolveThreads_ConfiguredPositive_ReturnsConfiguredValue()
         {
@@ -33,7 +76,7 @@ namespace SummaryGenerator.Tests.Unit
         [Fact]
         public void ResolveGpuLayerCount_ConfiguredNonNegative_AlwaysWinsRegardlessOfAutoTune()
         {
-            var result = InferenceParameterResolver.ResolveGpuLayerCount(configuredGpuLayerCount: 10, hardwareAutoTune: true, Plan);
+            var result = InferenceParameterResolver.ResolveGpuLayerCount(configuredGpuLayerCount: 10, hardwareAutoTune: true, Plan, SmallModelBytes, MaxModelPercentOfRam);
 
             Assert.Equal(10, result);
         }
@@ -42,7 +85,7 @@ namespace SummaryGenerator.Tests.Unit
         public void ResolveGpuLayerCount_ConfiguredExplicitZero_IsHonoredEvenWithAutoTune()
         {
             // 0 is an explicit "force CPU-only" value, distinct from the -1 auto sentinel.
-            var result = InferenceParameterResolver.ResolveGpuLayerCount(configuredGpuLayerCount: 0, hardwareAutoTune: true, Plan);
+            var result = InferenceParameterResolver.ResolveGpuLayerCount(configuredGpuLayerCount: 0, hardwareAutoTune: true, Plan, SmallModelBytes, MaxModelPercentOfRam);
 
             Assert.Equal(0, result);
         }
@@ -50,7 +93,7 @@ namespace SummaryGenerator.Tests.Unit
         [Fact]
         public void ResolveGpuLayerCount_SentinelWithAutoTuneOn_ReturnsRecommended()
         {
-            var result = InferenceParameterResolver.ResolveGpuLayerCount(configuredGpuLayerCount: -1, hardwareAutoTune: true, Plan);
+            var result = InferenceParameterResolver.ResolveGpuLayerCount(configuredGpuLayerCount: -1, hardwareAutoTune: true, Plan, SmallModelBytes, MaxModelPercentOfRam);
 
             Assert.Equal(Plan.RecommendedGpuLayerCount, result);
         }
@@ -58,7 +101,7 @@ namespace SummaryGenerator.Tests.Unit
         [Fact]
         public void ResolveGpuLayerCount_SentinelWithAutoTuneOff_ReturnsZero()
         {
-            var result = InferenceParameterResolver.ResolveGpuLayerCount(configuredGpuLayerCount: -1, hardwareAutoTune: false, Plan);
+            var result = InferenceParameterResolver.ResolveGpuLayerCount(configuredGpuLayerCount: -1, hardwareAutoTune: false, Plan, SmallModelBytes, MaxModelPercentOfRam);
 
             Assert.Equal(0, result);
         }

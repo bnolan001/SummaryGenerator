@@ -22,9 +22,30 @@ namespace SummaryGenerator.Tests.Unit
         [InlineData("Intel(R) Arc(TM) Graphics")]
         [InlineData("Intel(R) Arc(TM) B390 GPU")]
         [InlineData("Intel(R) Arc(TM) B370 GPU")]
-        public void ClassifyGpu_IntelArcIntegrated_ReturnsIntegrated(string name)
+        [InlineData("AMD Radeon(TM) 780M Graphics")]
+        [InlineData("AMD Radeon(TM) 760M Graphics")]
+        [InlineData("AMD Radeon 890M Graphics")]
+        [InlineData("AMD Radeon(TM) 8060S Graphics")]
+        public void ClassifyGpu_ModernIntegratedGpu_ReturnsModernIntegrated(string name)
+        {
+            Assert.Equal(GpuTier.ModernIntegrated, HardwareProfileService.ClassifyGpu([name]));
+        }
+
+        [Theory]
+        [InlineData("Intel(R) UHD Graphics 620")]
+        [InlineData("Intel(R) Iris(R) Xe Graphics")]
+        [InlineData("AMD Radeon(TM) Vega 8 Graphics")]
+        public void ClassifyGpu_OlderIntegratedGpu_ReturnsIntegrated(string name)
         {
             Assert.Equal(GpuTier.Integrated, HardwareProfileService.ClassifyGpu([name]));
+        }
+
+        [Fact]
+        public void ClassifyGpu_ModernIntegratedAlongsideDiscrete_ReturnsDiscrete()
+        {
+            var tier = HardwareProfileService.ClassifyGpu(["AMD Radeon(TM) 780M Graphics", "NVIDIA GeForce RTX 4070 Laptop GPU"]);
+
+            Assert.Equal(GpuTier.Discrete, tier);
         }
 
         [Fact]
