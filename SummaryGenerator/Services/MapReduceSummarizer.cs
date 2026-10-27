@@ -27,7 +27,7 @@ namespace SummaryGenerator.Services
 
             if (model.CountPromptTokens(systemPrompt, documentText) <= budget.MaxFinalPromptTokens)
             {
-                return await model.GenerateAsync(systemPrompt, documentText, budget.FinalOutputTokens, cancellationToken);
+                return await GenerateAsync(systemPrompt, documentText, budget.FinalOutputTokens, cancellationToken);
             }
 
             var chunks = DocumentChunker.SplitToTokenBudget(
@@ -42,10 +42,19 @@ namespace SummaryGenerator.Services
             var summaries = new List<string>(chunks.Count);
             foreach (var chunk in chunks)
             {
-                summaries.Add(await model.GenerateAsync(ChunkInstruction, chunk, budget.IntermediateOutputTokens, cancellationToken));
+                summaries.Add(await GenerateAsync(ChunkInstruction, chunk, budget.IntermediateOutputTokens, cancellationToken));
             }
 
             return await ReduceAsync(summaries, systemPrompt, budget, cancellationToken);
+        }
+
+        // LLamaSharp's StatelessExecutor ends generation quietly when cancelled, returning partial text.
+        // Throwing here stops the remaining chunk/combine calls and keeps partial notes from being saved.
+        private async Task<string> GenerateAsync(string instruction, string content, int maxOutputTokens, CancellationToken cancellationToken)
+        {
+            var output = await model.GenerateAsync(instruction, content, maxOutputTokens, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return output;
         }
 
         private async Task<string> ReduceAsync(
@@ -65,7 +74,7 @@ namespace SummaryGenerator.Services
 
                 if (combinedTokens <= budget.MaxFinalPromptTokens)
                 {
-                    return await model.GenerateAsync(systemPrompt, combined, budget.FinalOutputTokens, cancellationToken);
+                    return await GenerateAsync(systemPrompt, combined, budget.FinalOutputTokens, cancellationToken);
                 }
 
                 level++;
@@ -83,7 +92,7 @@ namespace SummaryGenerator.Services
                 {
                     nextLevel.Add(group.Count == 1
                         ? group[0]
-                        : await model.GenerateAsync(
+                        : await GenerateAsync(
                             CombineInstruction,
                             string.Join(SummarySeparator, group),
                             budget.IntermediateOutputTokens,
