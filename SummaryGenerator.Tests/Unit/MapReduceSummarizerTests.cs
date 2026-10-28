@@ -105,6 +105,38 @@ namespace SummaryGenerator.Tests.Unit
         }
 
         [Fact]
+        public async Task SummarizeAsync_CancelledDuringChunk_StopsWithoutFurtherCalls()
+        {
+            using var cts = new CancellationTokenSource();
+            var model = new FakeSummaryModel(generate: (_, maxOutputTokens) =>
+            {
+                cts.Cancel();
+                return new string('x', maxOutputTokens);
+            });
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                new MapReduceSummarizer(model, NullLogger.Instance)
+                    .SummarizeAsync(Document(400_000), SystemPrompt, 16384, 2048, cts.Token));
+
+            Assert.Single(model.Calls);
+        }
+
+        [Fact]
+        public async Task SummarizeAsync_CancelledDuringSingleCall_ThrowsInsteadOfReturningPartialOutput()
+        {
+            using var cts = new CancellationTokenSource();
+            var model = new FakeSummaryModel(generate: (_, _) =>
+            {
+                cts.Cancel();
+                return "partial";
+            });
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                new MapReduceSummarizer(model, NullLogger.Instance)
+                    .SummarizeAsync(Document(1_000), SystemPrompt, 16384, 2048, cts.Token));
+        }
+
+        [Fact]
         public async Task SummarizeAsync_IntermediateCallsUseIntermediateOutputTokens()
         {
             var model = new FakeSummaryModel();

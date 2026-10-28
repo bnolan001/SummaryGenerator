@@ -103,7 +103,17 @@
                         @foreach (var modelStatus in Model.ModelStatuses)
                         {
                             <tr>
-                                <td>@modelStatus.Name</td>
+                                <td>
+                                    @modelStatus.Name
+                                    @if (modelStatus.FitsThisPc == true)
+                                    {
+                                        <span class="badge text-bg-primary ms-1" title="Fits comfortably in this PC's memory">Runs well on this PC</span>
+                                    }
+                                    else if (modelStatus.FitsThisPc == false)
+                                    {
+                                        <span class="badge text-bg-warning ms-1" title="Larger than this PC can run comfortably; expect slower summaries">@Model.TooLargeLabel</span>
+                                    }
+                                </td>
                                 <td>
                                     @if (modelStatus.IsDownloaded)
                                     {

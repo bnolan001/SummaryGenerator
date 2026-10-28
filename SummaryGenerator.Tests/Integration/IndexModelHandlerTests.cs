@@ -142,6 +142,30 @@ namespace SummaryGenerator.Tests.Integration
             }
         }
 
+        [Fact]
+        public void OnGet_MarksModelFitWithoutChangingSelection()
+        {
+            var tempRoot = CreateTempDirectory();
+            try
+            {
+                // 8 GB * 40% = 3.2 GB: Phi-4 Mini (2.3 GB) fits, Llama (4.6 GB) is too large.
+                var pageModel = CreatePageModel(tempRoot, new InMemoryQueue(), new InMemoryPromptStore());
+
+                pageModel.OnGet();
+
+                Assert.Equal("Llama 3.3 (8B)", pageModel.SelectedModelName);
+                Assert.Equal("Phi-4 Mini (3.8B)", pageModel.ModelChoices.Single(c => c.Value == "Phi-4 Mini (3.8B)").Text);
+                Assert.Equal("Llama 3.3 (8B) (too large – CPU only)", pageModel.ModelChoices.Single(c => c.Value == "Llama 3.3 (8B)").Text);
+                Assert.True(pageModel.ModelStatuses.Single(s => s.Name == "Phi-4 Mini (3.8B)").FitsThisPc);
+                Assert.False(pageModel.ModelStatuses.Single(s => s.Name == "Llama 3.3 (8B)").FitsThisPc);
+                Assert.Equal("Too large – CPU only", pageModel.TooLargeLabel);
+            }
+            finally
+            {
+                Directory.Delete(tempRoot, true);
+            }
+        }
+
         private static IndexModel CreatePageModel(string contentRoot, InMemoryQueue queue, InMemoryPromptStore promptStore)
         {
             var modelsOptions = Options.Create(new ModelsOptions
@@ -153,13 +177,15 @@ namespace SummaryGenerator.Tests.Integration
                     {
                         Name = "Phi-4 Mini (3.8B)",
                         Repository = "repo/phi",
-                        FileName = "phi.gguf"
+                        FileName = "phi.gguf",
+                        ApproxSizeGb = 2.3
                     },
                     new ModelDetails
                     {
                         Name = "Llama 3.3 (8B)",
                         Repository = "repo/llama",
                         FileName = "llama.gguf",
+                        ApproxSizeGb = 4.6,
                         Default = true
                     }
                 ]
@@ -189,7 +215,14 @@ namespace SummaryGenerator.Tests.Integration
                 promptStore,
                 new NoopHuggingFaceRepository(),
                 new NoopAudioGenerator(),
+                new FixedHardwareProfileService(totalMemoryBytes: 8L * 1024 * 1024 * 1024),
+                Options.Create(new SummarizationOptions { IntegratedGpuMaxModelPercentOfRam = 40 }),
                 NullLogger<IndexModel>.Instance);
+        }
+
+        private sealed class FixedHardwareProfileService(long totalMemoryBytes) : IHardwareProfileService
+        {
+            public HardwarePlan GetPlan() => HardwareProfileService.ComputePlan(8, totalMemoryBytes, GpuTier.ModernIntegrated);
         }
 
         private static IFormFile CreatePdfUpload(string fileName)

@@ -18,6 +18,8 @@ namespace SummaryGenerator.Pages
         private readonly IPromptProfileStore _promptProfileStore;
         private readonly IHuggingFaceRepository _huggingFaceRepository;
         private readonly IAudioGenerator _audioGenerator;
+        private readonly IHardwareProfileService _hardwareProfileService;
+        private readonly SummarizationOptions _summarizationOptions;
         private readonly ILogger<IndexModel> _logger;
 
         public IndexModel(
@@ -29,6 +31,8 @@ namespace SummaryGenerator.Pages
             IPromptProfileStore promptProfileStore,
             IHuggingFaceRepository huggingFaceRepository,
             IAudioGenerator audioGenerator,
+            IHardwareProfileService hardwareProfileService,
+            IOptions<SummarizationOptions> summarizationOptions,
             ILogger<IndexModel> logger)
         {
             _modelsOptions = modelsOptions.Value;
@@ -39,6 +43,8 @@ namespace SummaryGenerator.Pages
             _promptProfileStore = promptProfileStore;
             _huggingFaceRepository = huggingFaceRepository;
             _audioGenerator = audioGenerator;
+            _hardwareProfileService = hardwareProfileService;
+            _summarizationOptions = summarizationOptions.Value;
             _logger = logger;
         }
 
@@ -72,6 +78,8 @@ namespace SummaryGenerator.Pages
         public List<TaskSummaryViewModel> TaskSummaries { get; private set; } = [];
 
         public List<ModelDownloadStatusViewModel> ModelStatuses { get; private set; } = [];
+
+        public string TooLargeLabel { get; private set; } = string.Empty;
 
         [TempData]
         public string? StatusMessage { get; set; }
@@ -377,10 +385,16 @@ namespace SummaryGenerator.Pages
                 SelectedPromptProfileId = _promptProfileStore.DefaultProfileId;
             }
 
+            var plan = _hardwareProfileService.GetPlan();
+            var maxModelPercentOfRam = _summarizationOptions.IntegratedGpuMaxModelPercentOfRam;
+            TooLargeLabel = ModelFit.TooLargeLabel(plan.GpuTier);
+
             ModelChoices = models
                 .Select(model => new SelectListItem
                 {
-                    Text = model.Name,
+                    Text = ModelFit.FitsThisPc(model, plan.TotalMemoryBytes, maxModelPercentOfRam) == false
+                        ? $"{model.Name} ({char.ToLowerInvariant(TooLargeLabel[0])}{TooLargeLabel[1..]})"
+                        : model.Name,
                     Value = model.Name,
                     Selected = string.Equals(model.Name, SelectedModelName, StringComparison.OrdinalIgnoreCase)
                 })
@@ -426,6 +440,7 @@ namespace SummaryGenerator.Pages
                         Repository = model.Repository,
                         FileName = model.FileName,
                         IsDownloaded = exists,
+                        FitsThisPc = ModelFit.FitsThisPc(model, plan.TotalMemoryBytes, maxModelPercentOfRam),
                         LocalPath = modelPath,
                         SizeBytes = sizeBytes
                     };
@@ -543,6 +558,9 @@ namespace SummaryGenerator.Pages
             public required string FileName { get; init; }
 
             public required bool IsDownloaded { get; init; }
+
+            /// <summary>True = fits comfortably, false = too large, null = size unknown.</summary>
+            public bool? FitsThisPc { get; init; }
 
             public required string LocalPath { get; init; }
 
