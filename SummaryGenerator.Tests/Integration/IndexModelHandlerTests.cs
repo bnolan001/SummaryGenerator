@@ -143,21 +143,22 @@ namespace SummaryGenerator.Tests.Integration
         }
 
         [Fact]
-        public void OnGet_MarksRecommendedModelWithoutChangingSelection()
+        public void OnGet_MarksModelFitWithoutChangingSelection()
         {
             var tempRoot = CreateTempDirectory();
             try
             {
-                // 8 GB * 40% = 3.2 GB, so only Phi-4 Mini (2.3 GB) fits; Llama stays the default selection.
+                // 8 GB * 40% = 3.2 GB: Phi-4 Mini (2.3 GB) fits, Llama (4.6 GB) is too large.
                 var pageModel = CreatePageModel(tempRoot, new InMemoryQueue(), new InMemoryPromptStore());
 
                 pageModel.OnGet();
 
                 Assert.Equal("Llama 3.3 (8B)", pageModel.SelectedModelName);
-                Assert.Equal("Phi-4 Mini (3.8B) (recommended for this PC)", pageModel.ModelChoices.Single(c => c.Value == "Phi-4 Mini (3.8B)").Text);
-                Assert.Equal("Llama 3.3 (8B)", pageModel.ModelChoices.Single(c => c.Value == "Llama 3.3 (8B)").Text);
-                Assert.True(pageModel.ModelStatuses.Single(s => s.Name == "Phi-4 Mini (3.8B)").IsRecommended);
-                Assert.False(pageModel.ModelStatuses.Single(s => s.Name == "Llama 3.3 (8B)").IsRecommended);
+                Assert.Equal("Phi-4 Mini (3.8B)", pageModel.ModelChoices.Single(c => c.Value == "Phi-4 Mini (3.8B)").Text);
+                Assert.Equal("Llama 3.3 (8B) (too large – CPU only)", pageModel.ModelChoices.Single(c => c.Value == "Llama 3.3 (8B)").Text);
+                Assert.True(pageModel.ModelStatuses.Single(s => s.Name == "Phi-4 Mini (3.8B)").FitsThisPc);
+                Assert.False(pageModel.ModelStatuses.Single(s => s.Name == "Llama 3.3 (8B)").FitsThisPc);
+                Assert.Equal("Too large – CPU only", pageModel.TooLargeLabel);
             }
             finally
             {

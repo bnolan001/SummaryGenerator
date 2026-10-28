@@ -22,8 +22,6 @@ namespace SummaryGenerator.Pages
         private readonly SummarizationOptions _summarizationOptions;
         private readonly ILogger<IndexModel> _logger;
 
-        private const string RecommendedSuffix = " (recommended for this PC)";
-
         public IndexModel(
             IOptions<ModelsOptions> modelsOptions,
             IOptions<StorageOptions> storageOptions,
@@ -80,6 +78,8 @@ namespace SummaryGenerator.Pages
         public List<TaskSummaryViewModel> TaskSummaries { get; private set; } = [];
 
         public List<ModelDownloadStatusViewModel> ModelStatuses { get; private set; } = [];
+
+        public string TooLargeLabel { get; private set; } = string.Empty;
 
         [TempData]
         public string? StatusMessage { get; set; }
@@ -385,15 +385,16 @@ namespace SummaryGenerator.Pages
                 SelectedPromptProfileId = _promptProfileStore.DefaultProfileId;
             }
 
-            var recommendedModelName = ModelRecommender.Recommend(
-                models,
-                _hardwareProfileService.GetPlan().TotalMemoryBytes,
-                _summarizationOptions.IntegratedGpuMaxModelPercentOfRam)?.Name;
+            var plan = _hardwareProfileService.GetPlan();
+            var maxModelPercentOfRam = _summarizationOptions.IntegratedGpuMaxModelPercentOfRam;
+            TooLargeLabel = ModelFit.TooLargeLabel(plan.GpuTier);
 
             ModelChoices = models
                 .Select(model => new SelectListItem
                 {
-                    Text = model.Name == recommendedModelName ? model.Name + RecommendedSuffix : model.Name,
+                    Text = ModelFit.FitsThisPc(model, plan.TotalMemoryBytes, maxModelPercentOfRam) == false
+                        ? $"{model.Name} ({char.ToLowerInvariant(TooLargeLabel[0])}{TooLargeLabel[1..]})"
+                        : model.Name,
                     Value = model.Name,
                     Selected = string.Equals(model.Name, SelectedModelName, StringComparison.OrdinalIgnoreCase)
                 })
@@ -439,7 +440,7 @@ namespace SummaryGenerator.Pages
                         Repository = model.Repository,
                         FileName = model.FileName,
                         IsDownloaded = exists,
-                        IsRecommended = model.Name == recommendedModelName,
+                        FitsThisPc = ModelFit.FitsThisPc(model, plan.TotalMemoryBytes, maxModelPercentOfRam),
                         LocalPath = modelPath,
                         SizeBytes = sizeBytes
                     };
@@ -558,7 +559,8 @@ namespace SummaryGenerator.Pages
 
             public required bool IsDownloaded { get; init; }
 
-            public bool IsRecommended { get; init; }
+            /// <summary>True = fits comfortably, false = too large, null = size unknown.</summary>
+            public bool? FitsThisPc { get; init; }
 
             public required string LocalPath { get; init; }
 
